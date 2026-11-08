@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan de implementación para eliminar el botón redundante de subida de CSV en la pestaña Claustro (centralizando toda la importación en la pestaña Importar Archivos) y suprimir los archivos adjuntos temporales de /public/assets/aistudio/ para proteger la privacidad del centro escolar.",
+  "updatedAt":  "2026-11-08T20:49:59.975009499Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

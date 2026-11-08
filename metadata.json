@@ -1,0 +1,6 @@
+{
+  "name": "Planificador Docente",
+  "description": "Planificador de clases y diario escolar para profesorado con horario semanal, exportación a PDF y WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
