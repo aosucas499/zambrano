@@ -32,7 +32,7 @@ object ShareUtils {
         }
 
         sb.append("═══════════════════════════\n")
-        sb.append("Generado con *Planificador Docente*")
+        sb.append("Generado con *Cuaderno de Zambrano*")
         return sb.toString()
     }
 

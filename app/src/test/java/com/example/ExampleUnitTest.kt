@@ -43,7 +43,7 @@ class ExampleUnitTest {
         assertTrue(texto.contains("PROGRAMACIÓN DOCENTE - 06/11/2026"))
         assertTrue(texto.contains("3º Literatura Infantil"))
         assertTrue(texto.contains("El Principito y el Zorro"))
-        assertTrue(texto.contains("Planificador Docente"))
+        assertTrue(texto.contains("Cuaderno de Zambrano"))
     }
 
     @Test

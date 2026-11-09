@@ -163,7 +163,7 @@ object PdfExporter {
             isAntiAlias = true
         }
         canvas.drawText(
-            "Planificador Docente • Página $pageNumber • Documento generado para seguimiento pedagógico",
+            "Cuaderno de Zambrano • Página $pageNumber • Documento generado para seguimiento pedagógico",
             MARGIN_LEFT,
             PAGE_HEIGHT - 30f,
             paintFooter

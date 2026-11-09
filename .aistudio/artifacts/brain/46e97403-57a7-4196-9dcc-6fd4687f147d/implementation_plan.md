@@ -1,59 +1,41 @@
-# Limpieza de Interfaz en Claustro y Privacidad de Archivos Adjuntos
+# Implementación: Renombrado a "Cuaderno de Zambrano" e Integración Google Drive
 
-Eliminación del botón redundante de subida de CSV en la cabecera de la pestaña Claustro (manteniendo toda la carga centralizada en *Importar Archivos*) y eliminación segura de los archivos temporales adjuntos en `/public/assets/aistudio/` para garantizar la máxima privacidad del centro escolar.
+Actualización de la marca de la aplicación y configuración de OAuth 2.0 para acceso a Google Drive.
 
 ## Decisiones Críticas y Revisión del Usuario
 
 > [!IMPORTANT]
-> Confirmado por el usuario en la fase de clarificación:
-> - **Botón redundante en Claustro**: Retirar el botón `Cargar RelPerCen.csv` de la pestaña Claustro. La carga de archivos queda unificada y organizada exclusivamente en la pestaña **Importar Archivos**.
-> - **Archivos adjuntos en `/public/assets/aistudio/`**: Eliminar los archivos CSV subidos como adjuntos temporales en el chat (`RegAlum_f30f3699.csv`, `RelPerCen_0d6fa40d.csv`, `horario_64fbabee.csv`, etc.) para que no ocupen espacio ni figuren en el explorador de archivos.
+> - **Cambio de Nombre**: Se renombrará la app en `metadata.json`, `strings.xml`, `settings.gradle.kts` y en todas las referencias del código (PDF, mensajes WhatsApp, tests) a "Cuaderno de Zambrano".
+> - **Nuevo Icono**: Se utilizará `ic_teacher_planner.jpg` para generar el nuevo icono adaptativo de la app.
+> - **Google Drive OAuth**: Implementaremos el flujo de OAuth 2.0 para que puedas vincular tu cuenta `g.educaand.es` y gestionar tus archivos CSV de forma segura en tu unidad de Drive.
 
 ---
 
 ## 1. Visión General y Concepto Principal
 
 ### Qué se entrega
-1. **Pestaña Claustro Más Limpia y Enfocada**: En la cabecera de la pestaña Claustro se mantiene únicamente el recuento de profesores de la plantilla (ej. "34 profesores en plantilla") junto al buscador de docentes, retirando el botón de subida para no duplicar funciones con la pestaña *Importar Archivos*.
-2. **Privacidad y Limpieza del Proyecto**: Eliminación física de los archivos temporales en `/public/assets/aistudio/`, asegurando que el espacio del proyecto quede libre de datos personales de centro y que solo residan en la base de datos SQLite local del dispositivo del usuario cuando este decida importarlos.
+1. **Renombrado Integral**: Cambio de "Planificador Docente" a "Cuaderno de Zambrano" en todos los archivos del proyecto, incluyendo el manifiesto, los recursos de texto y los mensajes generados por la app.
+2. **Nuevo Icono Adaptativo**: Configuración del icono corporativo a partir de la imagen proporcionada.
+3. **Integración con Google Drive**: Configuración segura de OAuth 2.0 para permitir el acceso a archivos de tu cuenta `g.educaand.es` y facilitar la importación/exportación de archivos CSV directamente a tu Drive.
 
 ---
 
 ## 2. Experiencia de Usuario y Diseño Visual
 
-### Cabecera de Claustro Actualizada
-
-```
-┌────────────────────────────────────────────────────────┐
-│ LazyColumn (fillMaxSize)                               │
-│                                                        │
-│ [ 🔍 Buscar por nombre, apellidos o correo...       ]  │ <- Buscador
-│                                                        │
-│ [ 34 profesores en plantilla ]                         │ <- Solo el badge informativo
-│                                                        │
-│ ┌──────────────────────────────────────────────────┐   │
-│ │ (M) Miguel de Cervantes                    [ ✉ ] │   │ <- Tarjetas de docentes
-│ │     mcervantes@ejemplo.edu                       │   │
-│ └──────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────┘
-```
+- **Nueva Identidad**: La app se identificará bajo la marca "Cuaderno de Zambrano".
+- **Flujo de Integración**: Se añadirá un botón o acción en la pestaña "Importar Archivos" para vincular tu cuenta de Google. Una vez autorizado, se mostrará un selector de archivos de Google Drive para cargar directamente tus CSV.
 
 ---
 
 ## 3. Plan de Cambios Específicos
 
-1. **`ResumenScreen.kt` (`SeccionClaustro`)**:
-   - Eliminar el parámetro `onImportarClaustro` de `SeccionClaustro`.
-   - En el `item(key = "header_count")`, mantener únicamente el `Surface` con el contador de profesores en plantilla, eliminando el `TextButton` de carga.
-   - Si no hay profesores importados, el mensaje del estado vacío dirigirá al usuario a la pestaña *Importar Archivos*.
-2. **Limpieza de Archivos**:
-   - Eliminar los archivos CSV de `/public/assets/aistudio/`:
-     - `RegAlum_f30f3699.csv`
-     - `RelPerCen_0d6fa40d.csv`
-     - `horario_64fbabee.csv`
-     - `C_digo.gs_5fc91608.txt`
-     - `Index_15b28775.html`
-3. **Verificación**:
-   - Compilación con `compile_applet`.
-   - Ejecución de pruebas unitarias con `gradle :app:testDebugUnitTest`.
-   - Re-ensamblado del APK (`gradle assembleDebug`) limpio y listo para su descarga.
+1. **Renombrado del Proyecto**:
+   - Actualizar `metadata.json`, `strings.xml` y `settings.gradle.kts`.
+   - Refactorizar las referencias en `ShareUtils.kt`, `PdfExporter.kt` y `ExampleUnitTest.kt`.
+2. **Icono Adaptativo**:
+   - Utilizar `app-icon-generation` para crear el nuevo icono a partir de `ic_teacher_planner.jpg`.
+3. **Integración OAuth 2.0 (Google Drive)**:
+   - Invocar el flujo `set_up_oauth` para solicitar acceso al scope `drive.file` (acceso limitado a archivos creados por la app).
+   - Crear una interfaz en `SeccionImportacionArchivos` para activar la vinculación y abrir el selector de archivos de Drive (`ActivityResultContracts.PickVisualMedia` o API de Google Picker para archivos de Drive).
+4. **Verificación**:
+   - `compile_applet` y tests unitarios.

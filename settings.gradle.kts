@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Planificador Docente"
+rootProject.name = "Cuaderno de Zambrano"
 
 include(":app")

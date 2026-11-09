@@ -1,6 +1,6 @@
 {
-  "summary":  "Plan de implementación para eliminar el botón redundante de subida de CSV en la pestaña Claustro (centralizando toda la importación en la pestaña Importar Archivos) y suprimir los archivos adjuntos temporales de /public/assets/aistudio/ para proteger la privacidad del centro escolar.",
-  "updatedAt":  "2026-11-08T20:49:59.975009499Z",
+  "summary":  "Plan de implementación para cambiar el nombre de la app a 'Cuaderno de Zambrano', actualizar el icono usando la imagen proporcionada y configurar la integración OAuth 2.0 para acceder a Google Drive (importar/exportar CSV).",
+  "updatedAt":  "2026-11-09T00:00:14.195376613Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
