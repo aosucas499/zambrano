@@ -866,7 +866,7 @@ private fun DialogoSelectorUnidades(
         mutableStateOf(
             unidades.associateWith { u ->
                 val guardadas = asignacionesGuardadas[u]
-                if (!guardadas.isNullOrEmpty()) guardadas else todasLasAreas.toSet()
+                if (!guardadas.isNullOrEmpty()) guardadas else emptySet()
             }.toMutableMap()
         )
     }
@@ -883,7 +883,7 @@ private fun DialogoSelectorUnidades(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Marca las clases que impartes y despliega para elegir las áreas:",
+                    text = "Marca las clases que impartes y selecciona manualmente las áreas de cada una:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -919,7 +919,7 @@ private fun DialogoSelectorUnidades(
                     items(unidades, key = { it }) { unidad ->
                         val isChecked = unidadesMarcadas.contains(unidad)
                         val isExpandida = unidadesExpandidas.contains(unidad)
-                        val areasElegidas = areasPorUnidad[unidad] ?: todasLasAreas.toSet()
+                        val areasElegidas = areasPorUnidad[unidad] ?: emptySet()
 
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -943,7 +943,12 @@ private fun DialogoSelectorUnidades(
                                     Checkbox(
                                         checked = isChecked,
                                         onCheckedChange = { chk ->
-                                            unidadesMarcadas = if (chk) unidadesMarcadas + unidad else unidadesMarcadas - unidad
+                                            if (chk) {
+                                                unidadesMarcadas = unidadesMarcadas + unidad
+                                                unidadesExpandidas = unidadesExpandidas + unidad
+                                            } else {
+                                                unidadesMarcadas = unidadesMarcadas - unidad
+                                            }
                                         }
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -951,7 +956,12 @@ private fun DialogoSelectorUnidades(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clickable {
-                                                unidadesMarcadas = if (isChecked) unidadesMarcadas - unidad else unidadesMarcadas + unidad
+                                                if (isChecked) {
+                                                    unidadesMarcadas = unidadesMarcadas - unidad
+                                                } else {
+                                                    unidadesMarcadas = unidadesMarcadas + unidad
+                                                    unidadesExpandidas = unidadesExpandidas + unidad
+                                                }
                                             }
                                     ) {
                                         Text(
@@ -961,9 +971,14 @@ private fun DialogoSelectorUnidades(
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = if (isChecked) "${areasElegidas.size} de ${todasLasAreas.size} áreas" else "No importada",
+                                            text = if (isChecked) {
+                                                if (areasElegidas.isEmpty()) "⚠️ Sin áreas (pulsa para seleccionar)"
+                                                else "${areasElegidas.size} de ${todasLasAreas.size} áreas"
+                                            } else "No importada",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (isChecked) {
+                                                if (areasElegidas.isEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                            } else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
 

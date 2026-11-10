@@ -100,9 +100,9 @@ fun SeccionEvaluacion(
 
     val listaSdas = remember {
         listOf(
-            "SA1" to "SA 1", "SA2" to "SA 2", "SA3" to "SA 3", "SA4" to "SA 4",
-            "SA5" to "SA 5", "SA6" to "SA 6", "SA7" to "SA 7", "SA8" to "SA 8",
-            "SA9" to "SA 9", "SA10" to "SA 10", "SA11" to "SA 11", "SA12" to "SA 12"
+            "SA1" to "SdA 1", "SA2" to "SdA 2", "SA3" to "SdA 3", "SA4" to "SdA 4",
+            "SA5" to "SdA 5", "SA6" to "SdA 6", "SA7" to "SdA 7", "SA8" to "SdA 8",
+            "SA9" to "SdA 9", "SA10" to "SdA 10", "SA11" to "SdA 11", "SA12" to "SdA 12"
         )
     }
 
@@ -111,7 +111,7 @@ fun SeccionEvaluacion(
             .fillMaxSize()
             .testTag("seccion_evaluacion")
     ) {
-        // --- 1. PESTAÑAS PRINCIPALES: SÁBANA GLOBAL vs SITUACIONES DE APRENDIZAJE ---
+        // --- 1. PESTAÑAS PRINCIPALES: REGISTRO GLOBAL vs SITUACIONES DE APRENDIZAJE ---
         Surface(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 1.dp,
@@ -125,7 +125,7 @@ fun SeccionEvaluacion(
                 androidx.compose.material3.Tab(
                     selected = modo == "GLOBAL",
                     onClick = { onCambiarModo("GLOBAL") },
-                    text = { Text("📊 Sábana Global (Criterios)", fontWeight = FontWeight.Bold) }
+                    text = { Text("📊 Registro Global (Criterios)", fontWeight = FontWeight.Bold) }
                 )
                 androidx.compose.material3.Tab(
                     selected = modo == "SDA",
@@ -157,7 +157,7 @@ fun SeccionEvaluacion(
                             value = cursoSeleccionado.ifBlank { cursosDisponibles.firstOrNull() ?: "Grupo" },
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Grupo / Unidad") },
+                            label = { Text("Grupo") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCurso) },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
@@ -198,7 +198,7 @@ fun SeccionEvaluacion(
                             value = areaSeleccionada.ifBlank { areasDisponibles.firstOrNull() ?: "Área" },
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Área (LOMLOE)") },
+                            label = { Text("Área") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedArea) },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
@@ -222,15 +222,16 @@ fun SeccionEvaluacion(
                         }
                     }
 
-                    // Si estamos en modo SDA, mostrar el selector de SdA (SA1 .. SA12)
+                    // Si estamos en modo SDA, mostrar el selector de SdA (SdA 1 .. SdA 12)
                     if (modo == "SDA") {
                         ExposedDropdownMenuBox(
                             expanded = expandedSda,
                             onExpandedChange = { expandedSda = !expandedSda },
                             modifier = Modifier.weight(0.9f)
                         ) {
+                            val etiquetaActual = listaSdas.firstOrNull { it.first == unidadSda }?.second ?: unidadSda.replace("SA", "SdA ")
                             OutlinedTextField(
-                                value = unidadSda,
+                                value = etiquetaActual,
                                 onValueChange = {},
                                 readOnly = true,
                                 label = { Text("SdA") },
@@ -292,7 +293,7 @@ fun SeccionEvaluacion(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Sábana Global de Criterios y Medias",
+                                    text = "Registro Global de Criterios y Medias",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -331,7 +332,8 @@ fun SeccionEvaluacion(
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Nueva Actividad en $unidadSda", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val nombreSdaLimpio = unidadSda.replace("SA", "SdA ")
+                            Text("Nueva Actividad en $nombreSdaLimpio", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
 
                         Button(
@@ -382,7 +384,7 @@ fun SeccionEvaluacion(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Para poder ver la sábana de evaluación y calificar criterios, importa tu archivo de alumnado de Séneca (RegAlum.csv o RegMisAlu.csv) en 'Importar Archivos'.",
+                            text = "Para poder ver la evaluación global y calificar criterios, importa tu archivo de alumnado de Séneca (RegAlum.csv o RegMisAlu.csv) en 'Importar Archivos'.",
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -405,7 +407,7 @@ fun SeccionEvaluacion(
                 onAbrirNuevaActividad = onAbrirNuevaActividad
             )
         } else {
-            // Sábana Global siempre visible y calculada dinámicamente
+            // Evaluación Global siempre visible y calculada dinámicamente
             TablaGlobalMatriz(
                 area = areaSeleccionada,
                 curso = cursoSeleccionado,
@@ -681,7 +683,7 @@ private fun TablaGlobalMatriz(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (curso.isNotBlank()) "No hay alumnado registrado en el grupo $curso" else "Selecciona un grupo para ver la sábana de evaluación",
+                text = if (curso.isNotBlank()) "No hay alumnado registrado en el grupo $curso" else "Selecciona un grupo para ver el registro global",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -744,7 +746,7 @@ private fun TablaGlobalMatriz(
                         .background(Color(0xFF475569))
                 )
 
-                // Celdas de cabecera: Criterios + Media Área
+                // Celdas de cabecera: MEDIA GLOBAL PRIMERO + Criterios hacia la derecha
                 Row(
                     modifier = Modifier
                         .weight(1f)
@@ -752,6 +754,33 @@ private fun TablaGlobalMatriz(
                         .horizontalScroll(horizontalScrollState),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Columna Media Global situada inmediatamente al lado del alumno
+                    Box(
+                        modifier = Modifier
+                            .width(86.dp)
+                            .fillMaxHeight()
+                            .background(Color(0xFF059669))
+                            .padding(horizontal = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "MEDIA",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // Divisor vertical entre Media y Criterios
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(Color(0xFF475569))
+                    )
+
+                    // Columnas de Criterios hacia la derecha
                     criterios.forEach { c ->
                         Column(
                             modifier = Modifier
@@ -778,24 +807,6 @@ private fun TablaGlobalMatriz(
                                 maxLines = 1
                             )
                         }
-                    }
-
-                    // Columna Media Área
-                    Box(
-                        modifier = Modifier
-                            .width(90.dp)
-                            .fillMaxHeight()
-                            .background(Color(0xFF059669))
-                            .padding(horizontal = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "MEDIA ÁREA",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
                     }
                 }
             }
@@ -872,7 +883,7 @@ private fun TablaGlobalMatriz(
                         .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 )
 
-                // Celdas deslizables horizontalmente
+                // Celdas deslizables horizontalmente: Media Global PRIMERA + Criterios hacia la derecha
                 Row(
                     modifier = Modifier
                         .weight(1f)
@@ -880,6 +891,42 @@ private fun TablaGlobalMatriz(
                         .horizontalScroll(horizontalScrollState),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Celda Media Área Global situada al lado del alumno
+                    Box(
+                        modifier = Modifier
+                            .width(86.dp)
+                            .fillMaxHeight()
+                            .background(
+                                when {
+                                    mediaGlobal == null -> Color.Transparent
+                                    mediaGlobal >= 5.0 -> Color(0xFFD1FAE5)
+                                    else -> Color(0xFFFEE2E2)
+                                }
+                            )
+                            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (mediaGlobal != null) String.format(Locale.US, "%.2f", mediaGlobal) else "—",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                mediaGlobal == null -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                mediaGlobal >= 5.0 -> Color(0xFF065F46)
+                                else -> Color(0xFF991B1B)
+                            }
+                        )
+                    }
+
+                    // Divisor vertical entre Media y Criterios
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    )
+
+                    // Celdas de cada criterio hacia la derecha
                     criterios.forEach { c ->
                         val mediaC = mediasPorCrit[c.codigo]
                         Box(
@@ -913,33 +960,6 @@ private fun TablaGlobalMatriz(
                                 )
                             }
                         }
-                    }
-
-                    // Celda Media Área Global
-                    Box(
-                        modifier = Modifier
-                            .width(90.dp)
-                            .fillMaxHeight()
-                            .background(
-                                when {
-                                    mediaGlobal == null -> Color.Transparent
-                                    mediaGlobal >= 5.0 -> Color(0xFFD1FAE5)
-                                    else -> Color(0xFFFEE2E2)
-                                }
-                            )
-                            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (mediaGlobal != null) String.format(Locale.US, "%.2f", mediaGlobal) else "—",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = when {
-                                mediaGlobal == null -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                mediaGlobal >= 5.0 -> Color(0xFF065F46)
-                                else -> Color(0xFF991B1B)
-                            }
-                        )
                     }
                 }
             }

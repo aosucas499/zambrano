@@ -123,7 +123,7 @@ object EvaluacionPdfExporter {
             var y = MARGIN_TOP
 
             // Cabecera superior del documento
-            canvas.drawText("CUADERNO DE ZAMBRANO — SÁBANA GLOBAL DE EVALUACIÓN LOMLOE", MARGIN_LEFT, y, paintTitle)
+            canvas.drawText("CUADERNO DE ZAMBRANO — REGISTRO GLOBAL DE EVALUACIÓN LOMLOE", MARGIN_LEFT, y, paintTitle)
             y += 15f
             val fechaActual = LocalDate.now().format(DateTimeFormatter.ofPattern("dd 'de' MMMM 'de' yyyy", Locale("es", "ES")))
             canvas.drawText("Área: $area   |   Curso: $curso   |   Grupo: $grupo   |   Fecha: $fechaActual   |   Página ${pagina + 1} de $totalPaginas", MARGIN_LEFT, y, paintSubtitle)
