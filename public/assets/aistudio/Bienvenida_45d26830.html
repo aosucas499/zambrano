@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body { background: #f0f2f5; padding: 20px; font-family: sans-serif; font-size: 0.9rem; }
+    .card-step { background: white; border-radius: 15px; padding: 30px; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+    .card-step.active { display: block; }
+    .btn-linea { width: 80px; height: 80px; margin: 5px; font-weight: bold; border-radius: 15px; font-size: 1.2rem; }
+    .area-box { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 10px; padding: 15px; margin-bottom: 15px; }
+    .badge-nivel { margin-right: 5px; margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <div class="container" style="max-width: 600px;">
+    
+    <div id="step1" class="card-step active text-center">
+      <h4 class="mb-4">¿Cuántas líneas tiene el centro?</h4>
+      <div class="d-flex justify-content-center flex-wrap">
+        <button class="btn btn-outline-primary btn-linea" onclick="setLineas(1)">1</button>
+        <button class="btn btn-outline-primary btn-linea" onclick="setLineas(2)">2</button>
+        <button class="btn btn-outline-primary btn-linea" onclick="setLineas(3)">3</button>
+        <button class="btn btn-outline-primary btn-linea" onclick="setLineas(4)">4</button>
+      </div>
+      <p class="text-muted small mt-3">Selecciona el número máximo de clases por curso (A, B, C, D...)</p>
+    </div>
+
+    <div id="step2" class="card-step">
+      <h4 class="mb-3">Asignación del Especialista</h4>
+      <p class="text-muted small">Marca los cursos que impartes en cada área seleccionada.</p>
+      <div id="listaAreas"></div>
+      <button class="btn btn-primary w-100 fw-bold mt-3" onclick="pasarAlPaso3()">SIGUIENTE: INTRODUCIR ALUMNOS</button>
+    </div>
+
+    <div id="step3" class="card-step">
+      <h4 class="mb-2">Listado de Alumnos</h4>
+      <p class="text-muted small mb-3">Pega la lista de alumnos (un nombre por línea) para cada uno de tus grupos asignados.</p>
+      <div id="listaAlumnosCont" style="max-height: 400px; overflow-y: auto;" class="pe-2"></div>
+      <button class="btn btn-success w-100 fw-bold mt-3" id="btnConfigurar" onclick="finalizarConfiguracion()">CONFIGURAR CUADERNO BASE</button>
+    </div>
+
+    <div id="stepFinal" class="card-step text-center">
+      <div class="text-success mb-3" style="font-size: 4rem;">✓</div>
+      <h4 class="text-success fw-bold">¡Cuaderno Inicializado!</h4>
+      <p class="text-muted mt-2">La base de datos de tus alumnos y asignaturas se ha creado correctamente.</p>
+      <p class="small text-secondary">Las pestañas de cada <b>Situación de Aprendizaje (SA)</b> se crearán automáticamente en el Excel la primera vez que añadas una actividad desde la web.</p>
+      <button class="btn btn-primary fw-bold w-100 mt-4" onclick="irAlCuaderno()">ENTRAR AL CUADERNO DE EVALUACIÓN</button>
+    </div>
+
+  </div>
+
+  <script>
+    let lineasSeleccionadas = 1;
+    let letrasGrupos = ["A", "B", "C", "D", "E"];
+    let nivelesDisponibles = ["1º E.P.", "2º E.P.", "3º E.P.", "4º E.P.", "5º E.P.", "6º E.P."];
+    
+    function setLineas(n) {
+      lineasSeleccionadas = n;
+      document.getElementById('step1').style.display = 'none';
+      document.getElementById('step2').style.display = 'block';
+      
+      Swal.fire({title: 'Cargando áreas...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+      
+      google.script.run.withSuccessHandler(areas => {
+        Swal.close();
+        let html = "";
+        areas.forEach(area => {
+          html += `<div class="area-box">
+            <h6 class="fw-bold text-primary border-bottom pb-1">${area}</h6>
+            <div class="d-flex flex-wrap gap-2 mt-2">`;
+          
+          nivelesDisponibles.forEach(nivel => {
+            for(let i = 0; i < lineasSeleccionadas; i++) {
+              let grupo = letrasGrupos[i];
+              let idCheck = `chk_${area.replace(/\s+/g, '_')}_${nivel.replace(/\s+/g, '_')}_${grupo}`;
+              html += `
+                <div class="form-check form-check-inline bg-white border px-2 py-1 rounded small shadow-sm m-0">
+                  <input class="form-check-input check-asig" type="checkbox" id="${idCheck}" data-area="${area}" data-nivel="${nivel}" data-grupo="${grupo}">
+                  <label class="form-check-label fw-bold" for="${idCheck}">${nivel.split(' ')[0]}${grupo}</label>
+                </div>`;
+            }
+          });
+          
+          html += `</div></div>`;
+        });
+        document.getElementById('listaAreas').innerHTML = html;
+      }).obtenerAreasMaestras();
+    }
+
+    function pasarAlPaso3() {
+      let checks = document.querySelectorAll('.check-asig:checked');
+      if(checks.length === 0) {
+        return Swal.fire('Atención', 'Debes seleccionar al menos un curso/grupo para tus áreas.', 'warning');
+      }
+      
+      document.getElementById('step2').style.display = 'none';
+      document.getElementById('step3').style.display = 'block';
+      
+      let gruposUnicos = {};
+      checks.forEach(c => {
+        let clave = `${c.dataset.nivel}_${c.dataset.grupo}`;
+        gruposUnicos[clave] = { nivel: c.dataset.nivel, grupo: c.dataset.grupo };
+      });
+      
+      let html = "";
+      for(let k in gruposUnicos) {
+        let g = gruposUnicos[k];
+        html += `
+          <div class="mb-3 p-3 bg-light border rounded">
+            <label class="form-label fw-bold text-secondary">Alumnos de ${g.nivel} - Grupo ${g.grupo}</label>
+            <textarea class="form-control txt-alumnos" rows="4" data-clave="${k}" placeholder="Pega aquí los alumnos (uno por línea)..."></textarea>
+          </div>`;
+      }
+      document.getElementById('listaAlumnosCont').innerHTML = html;
+    }
+
+    function finalizarConfiguracion() {
+      let btn = document.getElementById('btnConfigurar');
+      if(btn) btn.disabled = true;
+
+      let as = {}, al = {};
+      
+      document.querySelectorAll('.check-asig:checked').forEach(c => {
+        if(!as[c.dataset.area]) as[c.dataset.area] = [];
+        // CORREGIDO: Guardamos solo el nivel puro para evitar descuadres en los filtros
+        if(!as[c.dataset.area].includes(c.dataset.nivel)) as[c.dataset.area].push(c.dataset.nivel);
+      });
+      
+      let faltaAlumnos = false;
+      document.querySelectorAll('.txt-alumnos').forEach(t => {
+        let contenido = t.value.trim();
+        if(contenido) {
+          al[t.dataset.clave] = contenido;
+        } else {
+          faltaAlumnos = true;
+        }
+      });
+
+      if(faltaAlumnos) {
+        if(btn) btn.disabled = false;
+        return Swal.fire('Atención', 'Por favor, introduce la lista de alumnos para todos los grupos asignados.', 'warning');
+      }
+
+      Swal.fire({ 
+        title: 'Inicializando Cuaderno...', 
+        text: 'Creando base de datos de alumnos y asignaciones.',
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+      });
+
+      google.script.run
+        .withSuccessHandler(res => {
+          Swal.close();
+          if(res === "OK") {
+            document.getElementById('step3').style.display = 'none'; 
+            document.getElementById('stepFinal').style.display = 'block';
+          }
+        })
+        .withFailureHandler(err => {
+          Swal.close();
+          Swal.fire('Error', 'Hubo un problema: ' + err.message, 'error');
+          if(btn) {
+            btn.disabled = false;
+            btn.innerText = "CONFIGURAR CUADERNO BASE";
+          }
+        })
+        .configurarEspecialistaCompleto("Docente", as, al);
+    }
+
+    function irAlCuaderno() {
+      Swal.fire({
+        title: 'Cargando interfaz...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+          google.script.run.withSuccessHandler(url => {
+            window.top.location.href = url;
+          }).getAppUrl();
+        }
+      });
+    }
+  </script>
+</body>
+</html>

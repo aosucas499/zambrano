@@ -7,13 +7,19 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.DocenteRepository
+import com.example.data.model.ActividadEvaluacion
 import com.example.data.model.Alumno
 import com.example.data.model.CompaneroCen
+import com.example.data.model.CriterioEvaluacion
 import com.example.data.model.DiarioClase
 import com.example.data.model.HorarioSlot
+import com.example.data.model.NotaEvaluacion
+import com.example.data.model.RegistroConducta
 import com.example.util.CsvParser
 import com.example.util.DateUtils
+import com.example.util.EvaluacionPdfExporter
 import com.example.util.PdfExporter
+import com.example.util.SenecaCsvExporter
 import com.example.util.ShareUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,13 +27,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import com.example.data.model.RegistroConducta
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.time.LocalDate
 import java.time.LocalTime
@@ -60,7 +65,19 @@ data class DocenteUiState(
     val docentesParaSeleccionFet: List<String> = emptyList(),
     val bytesPendientesFet: ByteArray? = null,
     val snackbarMensaje: String? = null,
-    val estaCargando: Boolean = false
+    val estaCargando: Boolean = false,
+
+    // Variables de Evaluación LOMLOE
+    val evaluacionModo: String = "GLOBAL", // "GLOBAL" (Sábana) o "SDA" (Actividades)
+    val evaluacionUnidadSda: String = "SA1", // "SA1" .. "SA12"
+    val evaluacionCursoSeleccionado: String = "",
+    val evaluacionAreaSeleccionada: String = "",
+    val mostrarDialogoNuevaActividad: Boolean = false,
+    val mostrarGestionActividadesDialog: Boolean = false,
+    val actividadParaCalificar: ActividadEvaluacion? = null,
+    val alumnoParaCalificar: Alumno? = null,
+    val asignacionesUnidadesAreas: Map<String, Set<String>> = emptyMap(),
+    val todasLasAreasCatalogo: List<String> = listOf("Cono", "Ed. Artística", "Ed. Física", "Francés", "Inglés", "Lengua", "Matemáticas")
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -73,7 +90,8 @@ class DocenteViewModel(application: Application) : AndroidViewModel(application)
         db.alumnoDao(),
         db.conductaDao(),
         db.companeroDao(),
-        db.configuracionDao()
+        db.configuracionDao(),
+        db.evaluacionDao()
     )
 
     private val _uiState = MutableStateFlow(DocenteUiState())
@@ -173,18 +191,171 @@ class DocenteViewModel(application: Application) : AndroidViewModel(application)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    // ==========================================
+    // ESTADOS Y FLUJOS DE EVALUACIÓN LOMLOE
+    // ==========================================
+
+    val todosLosCriterios: StateFlow<List<CriterioEvaluacion>> = repository.todosLosCriterios
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val todasLasActividades: StateFlow<List<ActividadEvaluacion>> = repository.todasLasActividades
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Grupos/Cursos disponibles extraídos EXCLUSIVAMENTE del alumnado importado (unidad de RegAlum/RegMisAlu), nunca del horario
+    val cursosEvaluacionDisponibles: StateFlow<List<String>> = combine(
+        repository.todasLasUnidades,
+        repository.todosLosAlumnos
+    ) { unidades, alumnos ->
+        val deUnidades = unidades.map { it.trim() }.filter { it.isNotBlank() }
+        val deAlumnos = alumnos.map { it.unidad.trim() }.filter { it.isNotBlank() }
+        (deUnidades + deAlumnos).distinct().sorted()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Materias/Áreas disponibles: si el grupo seleccionado tiene áreas asignadas personalizadas, muestra sólo esas; si no, todas las del catálogo
+    val areasEvaluacionDisponibles: StateFlow<List<String>> = combine(
+        todosLosCriterios,
+        _uiState,
+        cursosEvaluacionDisponibles
+    ) { criterios, state, cursos ->
+        val curso = if (state.evaluacionCursoSeleccionado.isNotBlank()) {
+            state.evaluacionCursoSeleccionado.trim()
+        } else {
+            cursos.firstOrNull()?.trim() ?: ""
+        }
+        val asignadas = state.asignacionesUnidadesAreas[curso]
+        if (!asignadas.isNullOrEmpty()) {
+            asignadas.toList().sorted()
+        } else {
+            val areas = criterios.map { it.area.trim() }.filter { it.isNotBlank() }.distinct().sorted()
+            if (areas.isNotEmpty()) areas else listOf("Cono", "Ed. Artística", "Ed. Física", "Francés", "Inglés", "Lengua", "Matemáticas")
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Alumnos del curso/grupo seleccionado para evaluar (basado estrictamente en la unidad del alumnado importado)
+    val alumnosEvaluacion: StateFlow<List<Alumno>> = combine(
+        repository.todosLosAlumnos,
+        _uiState,
+        cursosEvaluacionDisponibles
+    ) { alumnos, state, cursos ->
+        val curso = if (state.evaluacionCursoSeleccionado.isNotBlank()) {
+            state.evaluacionCursoSeleccionado.trim()
+        } else {
+            cursos.firstOrNull()?.trim() ?: ""
+        }
+        val filtrados = if (curso.isBlank()) {
+            alumnos
+        } else {
+            alumnos.filter {
+                it.unidad.equals(curso, ignoreCase = true) ||
+                it.unidadNormalizada.equals(curso, ignoreCase = true)
+            }
+        }
+        filtrados.sortedWith(
+            compareBy<Alumno> { it.primerApellido.lowercase() }
+                .thenBy { it.segundoApellido.lowercase() }
+                .thenBy { it.nombre.lowercase() }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Criterios filtrados para el área y nivel actual
+    val criteriosEvaluacionFiltrados: StateFlow<List<CriterioEvaluacion>> = combine(
+        todosLosCriterios,
+        _uiState,
+        cursosEvaluacionDisponibles,
+        areasEvaluacionDisponibles
+    ) { criterios, state, cursos, areas ->
+        val areaSeleccionada = if (state.evaluacionAreaSeleccionada.isNotBlank()) {
+            state.evaluacionAreaSeleccionada.trim()
+        } else {
+            areas.firstOrNull()?.trim() ?: "Lengua"
+        }
+        val cursoSeleccionado = if (state.evaluacionCursoSeleccionado.isNotBlank()) {
+            state.evaluacionCursoSeleccionado.trim()
+        } else {
+            cursos.firstOrNull()?.trim() ?: ""
+        }
+        val numCurso = CsvParser.extraerCursoNumero(cursoSeleccionado)
+        val numBuscado = Regex("""(\d+)""").find(numCurso)?.value ?: ""
+
+        val filtrados = criterios.filter { crit ->
+            val coincideArea = if (areaSeleccionada.isBlank()) true else {
+                crit.area.equals(areaSeleccionada, ignoreCase = true) ||
+                        CsvParser.casarAreaConCatalogo(crit.area).equals(CsvParser.casarAreaConCatalogo(areaSeleccionada), ignoreCase = true)
+            }
+            val numCrit = Regex("""(\d+)""").find(crit.curso)?.value ?: ""
+            coincideArea && (numBuscado.isBlank() || numCrit == numBuscado)
+        }
+        if (filtrados.isNotEmpty()) {
+            filtrados.sortedBy { it.codigo }
+        } else {
+            // Si el nombre de grupo no tiene número explícito, mostrar los criterios del área seleccionada
+            criterios.filter { crit ->
+                if (areaSeleccionada.isBlank()) true else {
+                    crit.area.equals(areaSeleccionada, ignoreCase = true) ||
+                            CsvParser.casarAreaConCatalogo(crit.area).equals(CsvParser.casarAreaConCatalogo(areaSeleccionada), ignoreCase = true)
+                }
+            }.sortedBy { it.codigo }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Actividades para la SdA actual
+    val actividadesSdaActual: StateFlow<List<ActividadEvaluacion>> = combine(
+        todasLasActividades,
+        _uiState
+    ) { actividades, state ->
+        actividades.filter { act ->
+            act.unidadSda == state.evaluacionUnidadSda &&
+            (state.evaluacionCursoSeleccionado.isBlank() || act.grupo.equals(state.evaluacionCursoSeleccionado, ignoreCase = true)) &&
+            (state.evaluacionAreaSeleccionada.isBlank() || act.area.equals(state.evaluacionAreaSeleccionada, ignoreCase = true))
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Notas de evaluación de los alumnos
+    val notasClaseActual: StateFlow<List<NotaEvaluacion>> = repository.todasLasNotasEvaluacion
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
         viewModelScope.launch {
             // Inicializar base de datos con assets si está vacía
             repository.inicializarDatosSiVacio(getApplication())
+            // Precargar criterios oficiales de CE-Primaria
+            repository.asegurarCriteriosPrecargados(getApplication())
+
             val doc = repository.getDocenteActivoConfig()
             _docenteFlow.value = doc
             _uiState.value = _uiState.value.copy(docenteActivo = doc)
 
+            // Cargar asignaciones de áreas por unidad guardadas previamente
+            val asignacionesGuardadas = repository.getAsignacionesUnidadesAreas()
+            if (asignacionesGuardadas.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(asignacionesUnidadesAreas = asignacionesGuardadas)
+            }
+
             // Cargar lista de docentes disponibles
-            listaDocentes.collect { docs ->
-                if (docs.isNotEmpty()) {
-                    _uiState.value = _uiState.value.copy(listaDocentes = docs)
+            launch {
+                listaDocentes.collect { docs ->
+                    if (docs.isNotEmpty()) {
+                        _uiState.value = _uiState.value.copy(listaDocentes = docs)
+                    }
+                }
+            }
+
+            // Seleccionar primer curso y área para evaluación cuando estén disponibles
+            launch {
+                cursosEvaluacionDisponibles.collect { cursos ->
+                    if (cursos.isNotEmpty() && _uiState.value.evaluacionCursoSeleccionado.isBlank()) {
+                        _uiState.value = _uiState.value.copy(evaluacionCursoSeleccionado = cursos.first())
+                    }
+                }
+            }
+            launch {
+                areasEvaluacionDisponibles.collect { areas ->
+                    if (areas.isNotEmpty()) {
+                        val actual = _uiState.value.evaluacionAreaSeleccionada
+                        if (actual.isBlank() || !areas.contains(actual)) {
+                            _uiState.value = _uiState.value.copy(evaluacionAreaSeleccionada = areas.first())
+                        }
+                    }
                 }
             }
         }
@@ -552,10 +723,20 @@ class DocenteViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(unidadesMarcadas = nuevas)
     }
 
-    fun confirmarImportacionAlumnosConUnidadesMarcadas() {
+    fun confirmarImportacionAlumnosConUnidadesMarcadas(
+        unidades: Set<String> = _uiState.value.unidadesMarcadas,
+        areasPorUnidad: Map<String, Set<String>> = emptyMap()
+    ) {
         val bytes = _uiState.value.bytesPendientesAlumnos ?: return
-        val unidades = _uiState.value.unidadesMarcadas
-        confirmarImportacionAlumnos(bytes, unidades)
+        viewModelScope.launch {
+            if (areasPorUnidad.isNotEmpty()) {
+                val actuales = _uiState.value.asignacionesUnidadesAreas.toMutableMap()
+                actuales.putAll(areasPorUnidad)
+                repository.guardarAsignacionesUnidadesAreas(actuales)
+                _uiState.value = _uiState.value.copy(asignacionesUnidadesAreas = actuales)
+            }
+            confirmarImportacionAlumnos(bytes, unidades)
+        }
     }
 
     fun cancelarSeleccionUnidades() {
@@ -659,6 +840,177 @@ class DocenteViewModel(application: Application) : AndroidViewModel(application)
             PdfExporter.abrirOCompartirPdf(context, uri, "Programación $fechaVisible")
         } else {
             _uiState.value = _uiState.value.copy(snackbarMensaje = "Error al generar el archivo PDF")
+        }
+    }
+
+    // ==========================================
+    // MÉTODOS DE EVALUACIÓN
+    // ==========================================
+
+    fun cambiarModoEvaluacion(modo: String) {
+        _uiState.value = _uiState.value.copy(evaluacionModo = modo)
+    }
+
+    fun cambiarUnidadSda(sda: String) {
+        _uiState.value = _uiState.value.copy(evaluacionUnidadSda = sda)
+    }
+
+    fun cambiarCursoEvaluacion(curso: String) {
+        val asignadas = _uiState.value.asignacionesUnidadesAreas[curso]
+        val areaActual = _uiState.value.evaluacionAreaSeleccionada
+        val nuevaArea = if (!asignadas.isNullOrEmpty() && !asignadas.contains(areaActual)) {
+            asignadas.first()
+        } else {
+            areaActual
+        }
+        _uiState.value = _uiState.value.copy(
+            evaluacionCursoSeleccionado = curso,
+            evaluacionAreaSeleccionada = nuevaArea
+        )
+    }
+
+    fun cambiarAreaEvaluacion(area: String) {
+        _uiState.value = _uiState.value.copy(evaluacionAreaSeleccionada = area)
+    }
+
+    fun abrirDialogoNuevaActividad() {
+        _uiState.value = _uiState.value.copy(mostrarDialogoNuevaActividad = true)
+    }
+
+    fun cerrarDialogoNuevaActividad() {
+        _uiState.value = _uiState.value.copy(mostrarDialogoNuevaActividad = false)
+    }
+
+    fun crearNuevaActividad(nombre: String, criteriosSeleccionados: List<String>) {
+        if (nombre.isBlank() || criteriosSeleccionados.isEmpty()) {
+            _uiState.value = _uiState.value.copy(snackbarMensaje = "Introduce un nombre y al menos un criterio")
+            return
+        }
+        val state = _uiState.value
+        val jsonArray = org.json.JSONArray()
+        criteriosSeleccionados.forEach { jsonArray.put(it) }
+        val nuevaAct = ActividadEvaluacion(
+            nombre = nombre.trim(),
+            area = state.evaluacionAreaSeleccionada,
+            curso = CsvParser.extraerCursoNumero(state.evaluacionCursoSeleccionado),
+            grupo = state.evaluacionCursoSeleccionado,
+            unidadSda = state.evaluacionUnidadSda,
+            criteriosCodigosJson = jsonArray.toString()
+        )
+        viewModelScope.launch {
+            repository.crearActividad(nuevaAct, criteriosSeleccionados, alumnosEvaluacion.value)
+            _uiState.value = _uiState.value.copy(
+                mostrarDialogoNuevaActividad = false,
+                snackbarMensaje = "Actividad \"$nombre\" creada en ${state.evaluacionUnidadSda}"
+            )
+        }
+    }
+
+    fun eliminarActividad(actividadId: Long, nombreAct: String) {
+        viewModelScope.launch {
+            repository.eliminarActividad(actividadId)
+            _uiState.value = _uiState.value.copy(snackbarMensaje = "Actividad \"$nombreAct\" eliminada")
+        }
+    }
+
+    fun abrirCalificacion(alumno: Alumno, actividad: ActividadEvaluacion) {
+        _uiState.value = _uiState.value.copy(
+            alumnoParaCalificar = alumno,
+            actividadParaCalificar = actividad
+        )
+    }
+
+    fun cerrarCalificacion() {
+        _uiState.value = _uiState.value.copy(
+            alumnoParaCalificar = null,
+            actividadParaCalificar = null
+        )
+    }
+
+    fun guardarCalificacionesAlumno(nuevasNotas: Map<String, Double?>) {
+        val alumno = _uiState.value.alumnoParaCalificar ?: return
+        val actividad = _uiState.value.actividadParaCalificar ?: return
+        viewModelScope.launch {
+            repository.guardarCalificacionesAlumno(alumno.nombreCompleto, actividad, nuevasNotas)
+            cerrarCalificacion()
+            _uiState.value = _uiState.value.copy(snackbarMensaje = "Notas de ${alumno.nombreCompleto} guardadas")
+        }
+    }
+
+    fun abrirGestionActividadesDialog() {
+        _uiState.value = _uiState.value.copy(mostrarGestionActividadesDialog = true)
+    }
+
+    fun cerrarGestionActividadesDialog() {
+        _uiState.value = _uiState.value.copy(mostrarGestionActividadesDialog = false)
+    }
+
+    fun exportarSdaSeneca(context: Context) {
+        val state = _uiState.value
+        val uri = SenecaCsvExporter.exportarSdaParaSeneca(
+            context = context,
+            area = state.evaluacionAreaSeleccionada,
+            curso = CsvParser.extraerCursoNumero(state.evaluacionCursoSeleccionado),
+            grupo = state.evaluacionCursoSeleccionado,
+            unidadSda = state.evaluacionUnidadSda,
+            alumnos = alumnosEvaluacion.value,
+            actividades = actividadesSdaActual.value,
+            notas = notasClaseActual.value
+        )
+        if (uri != null) {
+            _uiState.value = _uiState.value.copy(
+                snackbarMensaje = "¡Copiado al portapapeles para Séneca y archivo CSV generado!"
+            )
+            ShareUtils.compartirArchivo(context, uri, "text/csv", "Séneca_${state.evaluacionUnidadSda}")
+        } else {
+            _uiState.value = _uiState.value.copy(snackbarMensaje = "Error al exportar tabla de Séneca")
+        }
+    }
+
+    fun exportarPdfGlobal(context: Context) {
+        val state = _uiState.value
+        val criterios = criteriosEvaluacionFiltrados.value
+        val alumnos = alumnosEvaluacion.value
+        val todasLasNotas = notasClaseActual.value
+
+        if (alumnos.isEmpty()) {
+            _uiState.value = _uiState.value.copy(snackbarMensaje = "No hay alumnado en el grupo seleccionado para generar el informe")
+            return
+        }
+
+        val filas = alumnos.map { al ->
+            val mediasPorCrit = mutableMapOf<String, Double>()
+            criterios.forEach { c ->
+                val notasHist = todasLasNotas.filter { n ->
+                    n.alumnoNombre.equals(al.nombreCompleto, ignoreCase = true) && n.criterioCodigo == c.codigo && n.valor != null
+                }
+                if (notasHist.isNotEmpty()) {
+                    val mediaC = notasHist.mapNotNull { it.valor }.average()
+                    mediasPorCrit[c.codigo] = mediaC
+                }
+            }
+            val mediaGlobal = if (mediasPorCrit.isNotEmpty()) mediasPorCrit.values.average() else null
+
+            EvaluacionPdfExporter.FilaAlumnoGlobal(
+                alumno = al,
+                mediasCriterios = mediasPorCrit,
+                mediaGlobal = mediaGlobal
+            )
+        }
+
+        val uri = EvaluacionPdfExporter.generarPdfGlobal(
+            context = context,
+            area = state.evaluacionAreaSeleccionada,
+            curso = CsvParser.extraerCursoNumero(state.evaluacionCursoSeleccionado),
+            grupo = state.evaluacionCursoSeleccionado,
+            criterios = criterios,
+            filas = filas
+        )
+
+        if (uri != null) {
+            PdfExporter.abrirOCompartirPdf(context, uri, "Informe Global de Evaluación")
+        } else {
+            _uiState.value = _uiState.value.copy(snackbarMensaje = "Error al generar el informe PDF global")
         }
     }
 

@@ -41,6 +41,11 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SentimentDissatisfied
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -78,7 +83,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.model.ActividadEvaluacion
+import com.example.data.model.Alumno
 import com.example.data.model.CompaneroCen
+import com.example.data.model.CriterioEvaluacion
+import com.example.data.model.NotaEvaluacion
 import com.example.ui.DocenteUiState
 import com.example.ui.TipoImportacion
 import com.example.util.CsvParser
@@ -86,19 +95,28 @@ import com.example.util.CsvParser
 @Composable
 fun ResumenScreen(
     uiState: DocenteUiState,
-    totalClases: Int,
-    totalCompletadas: Int,
-    totalSlotsSemanales: Int,
-    totalPositivos: Int,
-    totalNegativos: Int,
     companeros: List<CompaneroCen>,
-    onCompartirWhatsApp: () -> Unit,
-    onExportarPdf: () -> Unit,
+    cursosDisponibles: List<String>,
+    areasDisponibles: List<String>,
+    criterios: List<CriterioEvaluacion>,
+    actividades: List<ActividadEvaluacion>,
+    notas: List<NotaEvaluacion>,
+    alumnosEvaluacion: List<Alumno>,
+    onCambiarModoEvaluacion: (String) -> Unit,
+    onCambiarUnidadSda: (String) -> Unit,
+    onCambiarCursoEvaluacion: (String) -> Unit,
+    onCambiarAreaEvaluacion: (String) -> Unit,
+    onAbrirNuevaActividad: () -> Unit,
+    onEliminarActividad: (Long, String) -> Unit,
+    onCalificarAlumno: (Alumno, ActividadEvaluacion) -> Unit,
+    onExportarSeneca: () -> Unit,
+    onExportarPdfGlobal: () -> Unit,
+    onAbrirGestionActividades: () -> Unit,
     onBusquedaCompaneroChanged: (String) -> Unit,
     onImportarCsv: (Uri, TipoImportacion) -> Unit,
     onToggleUnidadMarcada: (String) -> Unit,
     onMarcarTodasUnidades: (Boolean) -> Unit,
-    onConfirmarImportacionUnidades: () -> Unit,
+    onConfirmarImportacionUnidades: (Set<String>, Map<String, Set<String>>) -> Unit,
     onCancelarSeleccionUnidades: () -> Unit,
     onConfirmarDocenteFet: (ByteArray, String) -> Unit,
     onCancelarSeleccionFet: () -> Unit,
@@ -106,7 +124,7 @@ fun ResumenScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var pestanaActual by remember { mutableIntStateOf(0) } // 0 = Estadísticas, 1 = Claustro, 2 = Importar archivos
+    var pestanaActual by remember { mutableIntStateOf(0) } // 0 = Evaluación, 1 = Claustro, 2 = Importar archivos
 
     val importSenecaLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -126,10 +144,6 @@ fun ResumenScreen(
         uri?.let { onImportarCsv(it, TipoImportacion.CLAUSTRO) }
     }
 
-    val porcentaje = if (totalClases > 0) {
-        ((totalCompletadas.toFloat() / totalClases.toFloat()) * 100).toInt()
-    } else 0
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -148,7 +162,7 @@ fun ResumenScreen(
                 Tab(
                     selected = pestanaActual == 0,
                     onClick = { pestanaActual = 0 },
-                    text = { Text("Estadísticas") },
+                    text = { Text("Evaluación") },
                     icon = { Icon(Icons.Default.Assessment, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
@@ -172,15 +186,29 @@ fun ResumenScreen(
                 .fillMaxWidth()
         ) {
             when (pestanaActual) {
-                0 -> SeccionEstadisticas(
-                    totalClases = totalClases,
-                    totalCompletadas = totalCompletadas,
-                    porcentaje = porcentaje,
-                    totalSlotsSemanales = totalSlotsSemanales,
-                    totalPositivos = totalPositivos,
-                    totalNegativos = totalNegativos,
-                    onCompartirWhatsApp = onCompartirWhatsApp,
-                    onExportarPdf = onExportarPdf
+                0 -> SeccionEvaluacion(
+                    context = context,
+                    modo = uiState.evaluacionModo,
+                    unidadSda = uiState.evaluacionUnidadSda,
+                    cursoSeleccionado = uiState.evaluacionCursoSeleccionado,
+                    areaSeleccionada = uiState.evaluacionAreaSeleccionada,
+                    cursosDisponibles = cursosDisponibles,
+                    areasDisponibles = areasDisponibles,
+                    criterios = criterios,
+                    actividades = actividades,
+                    notas = notas,
+                    alumnos = alumnosEvaluacion,
+                    onCambiarModo = onCambiarModoEvaluacion,
+                    onCambiarUnidadSda = onCambiarUnidadSda,
+                    onCambiarCurso = onCambiarCursoEvaluacion,
+                    onCambiarArea = onCambiarAreaEvaluacion,
+                    onAbrirNuevaActividad = onAbrirNuevaActividad,
+                    onEliminarActividad = onEliminarActividad,
+                    onCalificarAlumno = onCalificarAlumno,
+                    onExportarSeneca = onExportarSeneca,
+                    onExportarPdfGlobal = onExportarPdfGlobal,
+                    onAbrirGestionActividades = onAbrirGestionActividades,
+                    onIrAImportarArchivos = { pestanaActual = 2 }
                 )
 
                 1 -> SeccionClaustro(
@@ -201,14 +229,16 @@ fun ResumenScreen(
         }
     }
 
-    // Diálogo con casillas de verificación para seleccionar unidades al cargar RegAlum.csv
+    // Diálogo con casillas de verificación para seleccionar unidades y áreas al cargar RegAlum.csv
     if (uiState.unidadesParaSeleccion.isNotEmpty() && uiState.bytesPendientesAlumnos != null) {
         DialogoSelectorUnidades(
             unidades = uiState.unidadesParaSeleccion,
-            unidadesMarcadas = uiState.unidadesMarcadas,
-            onToggle = onToggleUnidadMarcada,
-            onMarcarTodas = onMarcarTodasUnidades,
-            onConfirmar = onConfirmarImportacionUnidades,
+            unidadesMarcadasInicial = uiState.unidadesMarcadas,
+            todasLasAreas = uiState.todasLasAreasCatalogo,
+            asignacionesGuardadas = uiState.asignacionesUnidadesAreas,
+            onConfirmar = { unidades, areas ->
+                onConfirmarImportacionUnidades(unidades, areas)
+            },
             onDismiss = onCancelarSeleccionUnidades
         )
     }
@@ -823,66 +853,221 @@ private fun SeccionImportacionArchivos(
 @Composable
 private fun DialogoSelectorUnidades(
     unidades: List<String>,
-    unidadesMarcadas: Set<String>,
-    onToggle: (String) -> Unit,
-    onMarcarTodas: (Boolean) -> Unit,
-    onConfirmar: () -> Unit,
+    unidadesMarcadasInicial: Set<String>,
+    todasLasAreas: List<String>,
+    asignacionesGuardadas: Map<String, Set<String>>,
+    onConfirmar: (Set<String>, Map<String, Set<String>>) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var unidadesMarcadas by remember {
+        mutableStateOf(if (unidadesMarcadasInicial.isNotEmpty()) unidadesMarcadasInicial else unidades.toSet())
+    }
+    var areasPorUnidad by remember {
+        mutableStateOf(
+            unidades.associateWith { u ->
+                val guardadas = asignacionesGuardadas[u]
+                if (!guardadas.isNullOrEmpty()) guardadas else todasLasAreas.toSet()
+            }.toMutableMap()
+        )
+    }
+    var unidadesExpandidas by remember { mutableStateOf(setOf<String>()) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "Selecciona tus unidades",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Column {
+                Text(
+                    text = "Selecciona Unidades y Áreas",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Marca las clases que impartes y despliega para elegir las áreas:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(340.dp)
+                    .height(420.dp)
             ) {
-                Text(
-                    text = "Marca las clases que impartes para importarlas a tu app:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { onMarcarTodas(true) }) {
-                        Text("Marcar todas", style = MaterialTheme.typography.labelSmall)
+                    TextButton(onClick = { unidadesMarcadas = unidades.toSet() }) {
+                        Text("Todas las unidades", style = MaterialTheme.typography.labelSmall)
                     }
-                    TextButton(onClick = { onMarcarTodas(false) }) {
-                        Text("Desmarcar", style = MaterialTheme.typography.labelSmall)
+                    TextButton(onClick = { unidadesMarcadas = emptySet() }) {
+                        Text("Desmarcar todas", style = MaterialTheme.typography.labelSmall)
                     }
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(unidades) { unidad ->
+                    items(unidades, key = { it }) { unidad ->
                         val isChecked = unidadesMarcadas.contains(unidad)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggle(unidad) }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = isChecked,
-                                onCheckedChange = { onToggle(unidad) }
+                        val isExpandida = unidadesExpandidas.contains(unidad)
+                        val areasElegidas = areasPorUnidad[unidad] ?: todasLasAreas.toSet()
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isChecked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isChecked) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = unidad, style = MaterialTheme.typography.bodyMedium)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                // Fila principal de la unidad
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = isChecked,
+                                        onCheckedChange = { chk ->
+                                            unidadesMarcadas = if (chk) unidadesMarcadas + unidad else unidadesMarcadas - unidad
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                unidadesMarcadas = if (isChecked) unidadesMarcadas - unidad else unidadesMarcadas + unidad
+                                            }
+                                    ) {
+                                        Text(
+                                            text = unidad,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (isChecked) "${areasElegidas.size} de ${todasLasAreas.size} áreas" else "No importada",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    // Botón desplegable de áreas
+                                    IconButton(
+                                        onClick = {
+                                            unidadesExpandidas = if (isExpandida) unidadesExpandidas - unidad else unidadesExpandidas + unidad
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isExpandida) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                            contentDescription = "Desplegar áreas de $unidad",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+
+                                // Contenido desplegable con las áreas
+                                if (isExpandida) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 6.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Áreas impartidas en $unidad:",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Row {
+                                            TextButton(
+                                                onClick = {
+                                                    val map = areasPorUnidad.toMutableMap()
+                                                    map[unidad] = todasLasAreas.toSet()
+                                                    areasPorUnidad = map
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                            ) {
+                                                Text("Todas", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    val map = areasPorUnidad.toMutableMap()
+                                                    map[unidad] = emptySet()
+                                                    areasPorUnidad = map
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                            ) {
+                                                Text("Ninguna", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    }
+
+                                    todasLasAreas.chunked(2).forEach { par ->
+                                        Row(modifier = Modifier.fillMaxWidth()) {
+                                            par.forEach { area ->
+                                                val areaChecked = areasElegidas.contains(area)
+                                                Row(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clickable {
+                                                            val nuevas = areasElegidas.toMutableSet()
+                                                            if (areaChecked) nuevas.remove(area) else nuevas.add(area)
+                                                            val map = areasPorUnidad.toMutableMap()
+                                                            map[unidad] = nuevas
+                                                            areasPorUnidad = map
+                                                        }
+                                                        .padding(vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Checkbox(
+                                                        checked = areaChecked,
+                                                        onCheckedChange = { chk ->
+                                                            val nuevas = areasElegidas.toMutableSet()
+                                                            if (chk) nuevas.add(area) else nuevas.remove(area)
+                                                            val map = areasPorUnidad.toMutableMap()
+                                                            map[unidad] = nuevas
+                                                            areasPorUnidad = map
+                                                        },
+                                                        modifier = Modifier.size(32.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(2.dp))
+                                                    Text(
+                                                        text = area,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                            if (par.size == 1) {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -890,7 +1075,9 @@ private fun DialogoSelectorUnidades(
         },
         confirmButton = {
             Button(
-                onClick = onConfirmar,
+                onClick = {
+                    onConfirmar(unidadesMarcadas, areasPorUnidad)
+                },
                 enabled = unidadesMarcadas.isNotEmpty()
             ) {
                 Text("Importar (${unidadesMarcadas.size} unidades)")

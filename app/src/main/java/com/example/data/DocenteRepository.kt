@@ -23,18 +23,27 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+import com.example.data.dao.EvaluacionDao
+import com.example.data.model.ActividadEvaluacion
+import com.example.data.model.CriterioEvaluacion
+import com.example.data.model.NotaEvaluacion
+
 class DocenteRepository(
     private val horarioDao: HorarioDao,
     private val diarioDao: DiarioDao,
     private val alumnoDao: AlumnoDao,
     private val conductaDao: ConductaDao,
     private val companeroDao: CompaneroDao,
-    private val configuracionDao: ConfiguracionDao
+    private val configuracionDao: ConfiguracionDao,
+    private val evaluacionDao: EvaluacionDao
 ) {
     val todosLosSlots: Flow<List<HorarioSlot>> = horarioDao.getAllSlots()
     val ultimasClases: Flow<List<DiarioClase>> = diarioDao.getUltimasClases()
     val totalCompletadas: Flow<Int> = diarioDao.getConteoCompletadas()
     val totalClases: Flow<Int> = diarioDao.getConteoTotal()
+
+    val todosLosCriterios: Flow<List<CriterioEvaluacion>> = evaluacionDao.getAllCriterios()
+    val todasLasActividades: Flow<List<ActividadEvaluacion>> = evaluacionDao.getAllActividades()
 
     val todosLosAlumnos: Flow<List<Alumno>> = alumnoDao.getAllAlumnos()
     val todasLasUnidades: Flow<List<String>> = alumnoDao.getUnidades()
@@ -285,4 +294,123 @@ class DocenteRepository(
         }
         lista.size
     }
+
+    // ==========================================
+    // SECCIÓN EVALUACIÓN LOMLOE
+    // ==========================================
+
+    suspend fun asegurarCriteriosPrecargados(context: Context) = withContext(Dispatchers.IO) {
+        val total = evaluacionDao.countCriterios()
+        if (total == 0) {
+            try {
+                context.assets.open("ce_primaria.csv").use { stream ->
+                    val criterios = CsvParser.parseCriteriosEvaluacion(stream)
+                    if (criterios.isNotEmpty()) {
+                        evaluacionDao.insertCriterios(criterios)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun getCriteriosPorCurso(curso: String): Flow<List<CriterioEvaluacion>> =
+        evaluacionDao.getCriteriosPorCurso(curso)
+
+    val todasLasNotasEvaluacion: Flow<List<NotaEvaluacion>> = evaluacionDao.getAllNotas()
+
+    fun getActividades(area: String, curso: String, grupo: String, unidadSda: String): Flow<List<ActividadEvaluacion>> =
+        evaluacionDao.getActividades(area, curso, grupo, unidadSda)
+
+    fun getNotasPorClase(area: String, curso: String, grupo: String): Flow<List<NotaEvaluacion>> =
+        evaluacionDao.getNotasPorClase(area, curso, grupo)
+
+    fun getNotasPorSda(area: String, curso: String, grupo: String, unidadSda: String): Flow<List<NotaEvaluacion>> =
+        evaluacionDao.getNotasPorSda(area, curso, grupo, unidadSda)
+
+    suspend fun crearActividad(actividad: ActividadEvaluacion, criteriosCodigos: List<String>, alumnos: List<Alumno>): Long = withContext(Dispatchers.IO) {
+        val id = evaluacionDao.insertActividad(actividad)
+        // Inicializar entradas de notas para todos los alumnos en blanco
+        val notasIniciales = mutableListOf<NotaEvaluacion>()
+        alumnos.forEach { al ->
+            criteriosCodigos.forEach { codCrit ->
+                notasIniciales.add(
+                    NotaEvaluacion(
+                        alumnoNombre = al.nombreCompleto,
+                        actividadId = id,
+                        area = actividad.area,
+                        curso = actividad.curso,
+                        grupo = actividad.grupo,
+                        unidadSda = actividad.unidadSda,
+                        criterioCodigo = codCrit,
+                        valor = null
+                    )
+                )
+            }
+        }
+        if (notasIniciales.isNotEmpty()) {
+            evaluacionDao.insertOrUpdateNotas(notasIniciales)
+        }
+        id
+    }
+
+    suspend fun guardarCalificacionesAlumno(
+        alumnoNombre: String,
+        actividad: ActividadEvaluacion,
+        nuevasNotas: Map<String, Double?>
+    ) = withContext(Dispatchers.IO) {
+        val notasAGuardar = nuevasNotas.map { (criterio, valor) ->
+            NotaEvaluacion(
+                alumnoNombre = alumnoNombre,
+                actividadId = actividad.id,
+                area = actividad.area,
+                curso = actividad.curso,
+                grupo = actividad.grupo,
+                unidadSda = actividad.unidadSda,
+                criterioCodigo = criterio,
+                valor = valor
+            )
+        }
+        evaluacionDao.insertOrUpdateNotas(notasAGuardar)
+    }
+
+    suspend fun eliminarActividad(actividadId: Long) = withContext(Dispatchers.IO) {
+        evaluacionDao.deleteNotasPorActividad(actividadId)
+        evaluacionDao.deleteActividad(actividadId)
+    }
+
+    suspend fun getAsignacionesUnidadesAreas(): Map<String, Set<String>> = withContext(Dispatchers.IO) {
+        val raw = configuracionDao.getValor("unidades_areas_asignadas") ?: return@withContext emptyMap()
+        try {
+            val json = org.json.JSONObject(raw)
+            val result = mutableMapOf<String, Set<String>>()
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val arr = json.getJSONArray(k)
+                val set = mutableSetOf<String>()
+                for (i in 0 until arr.length()) {
+                    set.add(arr.getString(i))
+                }
+                result[k] = set
+            }
+            result
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    suspend fun guardarAsignacionesUnidadesAreas(asignaciones: Map<String, Set<String>>) = withContext(Dispatchers.IO) {
+        try {
+            val json = org.json.JSONObject()
+            asignaciones.forEach { (unidad, areas) ->
+                val arr = org.json.JSONArray()
+                areas.forEach { arr.put(it) }
+                json.put(unidad, arr)
+            }
+            configuracionDao.setValor(ConfiguracionApp(clave = "unidades_areas_asignadas", valor = json.toString()))
+        } catch (_: Exception) {}
+    }
 }
+

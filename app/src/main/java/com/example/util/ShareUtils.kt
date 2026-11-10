@@ -54,4 +54,16 @@ object ShareUtils {
             context.startActivity(Intent.createChooser(genericIntent, "Compartir programación"))
         }
     }
+
+    fun compartirArchivo(context: Context, fileUri: android.net.Uri, mimeType: String, titulo: String) {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, fileUri)
+            putExtra(Intent.EXTRA_SUBJECT, titulo)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(shareIntent, "Compartir $titulo")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+    }
 }

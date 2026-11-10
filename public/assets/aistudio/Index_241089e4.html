@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body { background: #f8f9fa; font-size: 0.85rem; }
+    .header-bar { background: white; border-bottom: 2px solid #dee2e6; padding: 10px; position: sticky; top: 0; z-index: 1000; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .table-responsive { background: white; margin: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); overflow-x: auto; }
+    th { background: #2c3e50 !important; color: white !important; text-align: center; white-space: nowrap; padding: 6px 12px !important; }
+    .th-global { background: #27ae60 !important; }
+    .th-media { background: #d35400 !important; }
+    td { text-align: center; cursor: pointer; border: 1px solid #eee; padding: 6px 12px !important; white-space: nowrap; }
+    .nota-badge { background: #e9ecef; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.75rem; display: inline-block; margin: 1px; }
+    .td-nombre { text-align: left !important; font-weight: bold; background: #fcfcfc; position: sticky; left: 0; z-index: 10; border-right: 2px solid #dee2e6 !important; }
+    .bg-comp { background: #f1f2f6; font-size: 0.7rem; color: #57606f; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="header-bar shadow-sm">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      <select id="selArea" class="form-select form-select-sm" style="width:auto;" onchange="cambioArea()"></select>
+      <select id="selNivel" class="form-select form-select-sm" style="width:auto;" onchange="cambioNivel()"></select>
+      <select id="selGrupo" class="form-select form-select-sm" style="width:auto;" onchange="renderizar()"></select>
+      
+      <select id="selModoVista" class="form-select form-select-sm fw-bold text-success border-success" style="width:auto;" onchange="conmutarModoVista()">
+        <option value="SA">📂 Vista: Situación de Aprendizaje (Actividades)</option>
+        <option value="GLOBAL">📊 Vista: Sabana Global (Criterios LOMLOE)</option>
+      </select>
+
+      <select id="selUnidad" class="form-select form-select-sm fw-bold text-primary border-primary" style="width:auto;" onchange="renderizar()">
+        <option value="SA1">SA 1</option> <option value="SA2">SA 2</option> <option value="SA3">SA 3</option>
+        <option value="SA4">SA 4</option> <option value="SA5">SA 5</option> <option value="SA6">SA 6</option>
+        <option value="SA7">SA 7</option> <option value="SA8">SA 8</option> <option value="SA9">SA 9</option>
+        <option value="SA10">SA 10</option> <option value="SA11">SA 11</option> <option value="SA12">SA 12</option>
+      </select>
+    </div>
+
+    <div>
+      <button id="btn-nueva-act" class="btn btn-success btn-sm fw-bold px-3" onclick="abrirAct()">+ NUEVA ACTIVIDAD</button>
+      <button id="btn-nuevo-alumno" onclick="agregarNuevoAlumnoGAS()" class="btn btn-outline-success btn-sm fw-bold ms-2">➕ Añadir Alumno</button>
+    </div>
+  </div>
+
+  <div id="tablaCont" class="table-responsive">
+    <table class="table table-sm table-hover align-middle m-0">
+      <thead id="head"></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+
+  <div class="modal fade" id="mod" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header py-2"><b>Nueva Actividad</b></div>
+    <div class="modal-body">
+      <input type="text" id="nA" class="form-control mb-2" placeholder="Nombre de la actividad">
+      <div class="input-group mb-3 input-group-sm">
+        <span class="input-group-text bg-light">Asignar a:</span>
+        <select id="nU" class="form-select">
+          <option value="SA1">Situación de Aprendizaje 1</option> <option value="SA2">Situación de Aprendizaje 2</option>
+          <option value="SA3">Situación de Aprendizaje 3</option> <option value="SA4">Situación de Aprendizaje 4</option>
+          <option value="SA5">Situación de Aprendizaje 5</option> <option value="SA6">Situación de Aprendizaje 6</option>
+          <option value="SA7">Situación de Aprendizaje 7</option> <option value="SA8">Situación de Aprendizaje 8</option>
+          <option value="SA9">Situación de Aprendizaje 9</option> <option value="SA10">Situación de Aprendizaje 10</option>
+          <option value="SA11">Situación de Aprendizaje 11</option> <option value="SA12">Situación de Aprendizaje 12</option>
+        </select>
+      </div>
+      <div id="mB" style="max-height:300px; overflow-y:auto" class="border p-2"></div>
+    </div>
+    <div class="modal-footer py-1"><button class="btn btn-primary w-100" id="mBtn">GUARDAR ACTIVIDAD</button></div>
+  </div></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let conf = {}, actsG = [];
+    window.notasDB = []; // Inicialización limpia global
+
+    const modal = new bootstrap.Modal(document.getElementById('mod'));
+
+    window.onload = () => {
+      google.script.run.withSuccessHandler(c => {
+        conf = c;
+        if(conf && conf.areas && conf.areas.length > 0) {
+          document.getElementById('selArea').innerHTML = conf.areas.map(a => `<option value="${a}">${a}</option>`).join('');
+          cambioArea();
+        }
+      }).obtenerDatosConfig();
+    };
+
+    function cambioArea() {
+      const a = document.getElementById('selArea').value;
+      const niveles = conf.asignaciones[a] || [];
+      document.getElementById('selNivel').innerHTML = niveles.map(n => `<option value="${n}">${n}</option>`).join('');
+      cambioNivel();
+    }
+
+    function cambioNivel() {
+      const n = document.getElementById('selNivel').value;
+      const grupos = [...new Set(conf.alumnos.filter(al => al.nivel === n).map(al => al.grupo))].sort();
+      document.getElementById('selGrupo').innerHTML = grupos.map(g => `<option value="${g}">${g}</option>`).join('');
+      renderizar();
+    }
+
+    function conmutarModoVista() {
+      const vista = document.getElementById('selModoVista').value;
+      if (vista === 'GLOBAL') {
+        document.getElementById('selUnidad').style.display = 'none';
+        document.getElementById('btn-nueva-act').style.display = 'none';
+      } else {
+        document.getElementById('selUnidad').style.display = 'inline-block';
+        document.getElementById('btn-nueva-act').style.display = 'inline-block';
+      }
+      renderizar();
+    }
+
+    function renderizar() {
+      const vista = document.getElementById('selModoVista').value;
+      if (vista === 'GLOBAL') {
+        renderizarTablaGlobal();
+      } else {
+        renderizarTablaSA();
+      }
+    }
+
+    function solicitarBorrarActividadGoogle(e, idActividad, nombreActividad) {
+      if (e && e.stopPropagation) e.stopPropagation(); 
+
+      let tieneNotasPuestas = false;
+      const tablaCuerpo = document.getElementById('body');
+      
+      if (tablaCuerpo) {
+        const cabecerasHTML = Array.from(document.querySelectorAll('#head th'));
+        const idxColumna = cabecerasHTML.findIndex(th => th.innerText.includes(nombreActividad));
+
+        if (idxColumna !== -1) {
+          const filasHTML = document.querySelectorAll('#body tr');
+          filasHTML.forEach(tr => {
+            const celda = tr.children[idxColumna];
+            if (celda) {
+              const texto = celda.innerText.trim();
+              if (texto !== '—' && texto !== '' && texto !== '— · —') {
+                tieneNotasPuestas = true;
+              }
+            }
+          });
+        }
+      }
+
+      if (tieneNotasPuestas) {
+        Swal.fire({
+          title: 'No se puede eliminar',
+          text: `La actividad "${nombreActividad}" tiene notas ya introducidas. Para poder borrarla de la base de datos, primero debes vaciar o borrar las notas de sus criterios (escribiendo 0 o vaciando el cuadro) en esta misma tabla.`,
+          icon: 'error',
+          confirmButtonColor: '#3085d6',
+          confirmButtonText: 'Entendido'
+        });
+        return; 
+      }
+
+      Swal.fire({
+        title: `¿Borrar la actividad "${nombreActividad}"?`,
+        text: "Se eliminará permanentemente de la pestaña 'Actividades_Def'.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, borrar',
+        cancelButtonText: 'Cancelar'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({ title: 'Eliminando de la nube...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+          
+          const area = document.getElementById('selArea').value;
+          const nivel = document.getElementById('selNivel').value;
+          const grupo = document.getElementById('selGrupo').value;
+          const unidad = document.getElementById('selUnidad').value;
+
+          google.script.run
+            .withFailureHandler(err => {
+              Swal.fire('Error en el Servidor', err.message || err, 'error');
+            })
+            .withSuccessHandler(res => {
+              if (res && res.exito) {
+                renderizar(); 
+                Swal.fire({ title: '¡Actividad eliminada!', icon: 'success', timer: 1200, showConfirmButton: false });
+              } else {
+                Swal.fire('No se pudo borrar', res.mensaje || 'Error desconocido', 'error');
+              }
+            })
+            .eliminarActividadCompleta(idActividad, area, nivel, grupo, unidad);
+        }
+      });
+    }
+    
+    function renderizarTablaGlobal() {
+      const a = document.getElementById('selArea').value;
+      const n = document.getElementById('selNivel').value;
+      const g = document.getElementById('selGrupo').value;
+
+      document.getElementById('head').innerHTML = `<tr><th class="td-nombre">Alumno</th><th>Cargando Sabana Global...</th></tr>`;
+
+      google.script.run.withSuccessHandler(datosGlobales => {
+        if (!datosGlobales || datosGlobales.length < 2) {
+          document.getElementById('head').innerHTML = `<tr><th class="td-nombre">Alumno</th><th>No hay datos globales consolidados</th></tr>`;
+          document.getElementById('body').innerHTML = '';
+          return;
+        }
+
+        const cabeceras = datosGlobales[0];
+        const subcabeceras = datosGlobales[1];
+        const filasAlumnos = datosGlobales.slice(2);
+
+        let htmlHead = `<tr><th class="td-nombre" rowspan="2">Alumno / Criterios</th>`;
+        for (let i = 2; i < cabeceras.length; i++) {
+          let claseExtra = (cabeceras[i] === 'MEDIA') ? 'th-media' : 'th-global';
+          htmlHead += `<th class="${claseExtra}">${cabeceras[i]}</th>`;
+        }
+        htmlHead += `</tr><tr class="bg-comp">`;
+        for (let i = 2; i < subcabeceras.length; i++) {
+          htmlHead += `<td class="bg-comp">${subcabeceras[i] || '—'}</td>`;
+        }
+        htmlHead += `</tr>`;
+        document.getElementById('head').innerHTML = htmlHead;
+
+        document.getElementById('body').innerHTML = filasAlumnos.map(fila => {
+          let htmlFila = `<tr><td class="td-nombre">${fila[0]}</td>`;
+          for (let i = 2; i < fila.length; i++) {
+            let val = fila[i];
+            if (i === fila.length - 1) { 
+              let num = parseFloat(val);
+              htmlFila += `<td class="fw-bold bg-light text-danger">${!isNaN(num) ? num.toFixed(2) : '—'}</td>`;
+            } else {
+              let num = parseFloat(val);
+              htmlFila += `<td>${!isNaN(num) ? num.toFixed(2) : `<span class="text-muted">${val}</span>`}</td>`;
+            }
+          }
+          htmlFila += `</tr>`;
+          return htmlFila;
+        }).join('');
+      }).obtenerMatrizGlobalParaTabla(a, n, g);
+    }
+
+    function abrirAct() {
+      const area = document.getElementById('selArea').value;
+      const nivel = document.getElementById('selNivel').value;
+      const grupo = document.getElementById('selGrupo').value;
+      
+      document.getElementById('nA').value = "";
+      document.getElementById('nU').value = document.getElementById('selUnidad').value;
+      document.getElementById('mB').innerHTML = "<div class='text-center p-3 text-secondary'>🔍 Buscando criterios...</div>";
+      modal.show();
+
+      google.script.run
+        .withFailureHandler(err => {
+          document.getElementById('mB').innerHTML = `<div class='text-danger p-2 small'><b>Error:</b> ${err.message}</div>`;
+        })
+        .withSuccessHandler(cr => {
+          if (!cr || cr.length === 0) {
+            document.getElementById('mB').innerHTML = `<div class='text-warning p-2 small text-center'>⚠️ <b>No se encontraron criterios</b></div>`;
+            return;
+          }
+          document.getElementById('mB').innerHTML = cr.map(c => 
+            `<div class="form-check border-bottom py-1 small text-start">
+              <input class="form-check-input c-n" type="checkbox" value="${c.codigo}" id="c_${c.codigo}">
+              <label class="form-check-label" for="c_${c.codigo}"><b>${c.codigo}</b>: ${c.desc}</label>
+            </div>`
+          ).join('');
+        })
+        .obtenerCriteriosFiltrados(area, nivel);
+      
+      document.getElementById('mBtn').onclick = () => {
+        const nom = document.getElementById('nA').value.trim();
+        const sel = Array.from(document.querySelectorAll('.c-n:checked')).map(c => ({codigo: c.value}));
+        const btn = document.getElementById('mBtn');
+        const uni = document.getElementById('nU').value; 
+        
+        if (!nom) return Swal.fire('Atención', 'Escribe un nombre', 'warning');
+        if (sel.length === 0) return Swal.fire('Atención', 'Selecciona al menos un criterio', 'warning');
+
+        btn.disabled = true;
+        btn.innerText = "Guardando...";
+
+        google.script.run
+          .withSuccessHandler(() => {
+            btn.disabled = false;
+            btn.innerText = "GUARDAR ACTIVIDAD";
+            modal.hide();
+            renderizar();
+          })
+          .withFailureHandler(err => {
+            btn.disabled = false;
+            btn.innerText = "GUARDAR ACTIVIDAD";
+            Swal.fire('Error', err.message, 'error');
+          })
+          .crearEstructuraActividad(nom, area, nivel, grupo, uni, sel);
+      };
+    }
+
+    function renderizarTablaSA() {
+      const a = document.getElementById('selArea').value, 
+            n = document.getElementById('selNivel').value, 
+            g = document.getElementById('selGrupo').value,
+            u = document.getElementById('selUnidad').value;
+            
+      google.script.run.withSuccessHandler(p => {
+        actsG = p.actividades || []; 
+        
+        // CONTROL INTEGRAL PARA EVITAR CONGELADOS: Si notasActuales viene vacío o nulo, creamos estructura limpia
+        if (!p.notasActuales || p.notasActuales.length === 0) {
+          window.notasDB = [["Alumno", "Asignatura"]];
+        } else {
+          window.notasDB = p.notasActuales;
+        }
+
+        const alumnos = conf.alumnos.filter(x => x.nivel === n && x.grupo === g);
+        
+        if (!p.notasActuales || p.notasActuales.length === 0) {
+           document.getElementById('head').innerHTML = `<tr><th class="td-nombre">Alumno</th><th>Sin actividades creadas en esta SA</th></tr>`;
+           document.getElementById('body').innerHTML = alumnos.map(al => `<tr><td class="td-nombre">${al.nombre}</td><td>—</td></tr>`).join('');
+           return;
+        }
+
+        const cabDB = window.notasDB[0];
+        
+        document.getElementById('head').innerHTML = `<tr><th class="td-nombre">Alumno</th>` + 
+          actsG.map(act => `
+            <th>
+              <div class="d-flex align-items-center justify-content-center gap-2">
+                <span>${act.nombre}</span>
+                <button class="btn btn-link p-0 text-danger" style="text-decoration:none; border:none; background:none; cursor:pointer; font-size:0.85rem;" title="Borrar Actividad" 
+                        onclick="solicitarBorrarActividadGoogle(event, '${act.id}', '${act.nombre.replace(/'/g, "\\'")}')">
+                  🗑️
+                </button>
+              </div>
+            </th>`).join('') + `</tr>`;
+        
+        document.getElementById('body').innerHTML = alumnos.map(al => {
+          let html = `<tr><td class="td-nombre">${al.nombre}</td>`;
+          let fAl = window.notasDB.find(f => f[0] === al.nombre && f[1] === a);
+          
+          actsG.forEach(act => {
+            let nAct = [];
+            act.criterios.forEach(c => {
+              let idx = cabDB ? cabDB.indexOf(c.codigo) : -1;
+              if(idx != -1 && fAl && fAl[idx] !== "" && fAl[idx] !== undefined && fAl[idx] !== "—") {
+                nAct.push(parseFloat(fAl[idx]).toFixed(1));
+              }
+            });
+            html += `<td onclick="evaluar('${escapeReg(al.nombre)}','${act.id}')">${nAct.length ? `<div class="nota-badge">${nAct.join(' · ')}</div>` : '—'}</td>`;
+          });
+          
+          html += `</tr>`;
+          return html;
+        }).join('');
+      }).obtenerPaqueteEvaluacion(a, n, g, u);
+    }
+
+    function evaluar(nombreAlumno, idActividad) {
+      const act = actsG.find(x => x.id === idActividad);
+      if (!act) return;
+
+      const n = document.getElementById('selNivel').value,
+            g = document.getElementById('selGrupo').value,
+            a = document.getElementById('selArea').value;
+
+      // Garantizamos que cabDB exista siempre de forma segura
+      const cabDB = (window.notasDB && window.notasDB.length > 0) ? window.notasDB[0] : ["Alumno", "Asignatura"];
+      const fAl = (window.notasDB && window.notasDB.length > 0) ? window.notasDB.find(f => f[0] === nombreAlumno && f[1] === a) : null;
+
+      let htmlForm = `<div style="text-align:left; max-height:350px; overflow-y:auto; padding-right:5px;">
+                        <p class="text-muted small mb-3">Introduce notas del 1 al 10. Escribe 0 o deja en blanco para borrar la nota.</p>`;
+      
+      act.criterios.forEach(c => {
+        let notaActual = "";
+        if (fAl && cabDB) {
+          let idx = cabDB.indexOf(c.codigo);
+          if (idx != -1 && fAl[idx] !== undefined && fAl[idx] !== "—") {
+            notaActual = fAl[idx];
+          }
+        }
+        
+        htmlForm += `
+          <div class="mb-3">
+            <label class="form-label fw-bold mb-1" style="font-size:0.85rem;">${c.codigo} - <span class="fw-normal text-secondary">${c.desc || ''}</span></label>
+            <input type="number" step="0.1" min="0" max="10" class="form-control form-control-sm eval-input" 
+                   data-criterio="${c.codigo}" value="${notaActual}" placeholder="1 - 10 (0 para borrar)">
+          </div>`;
+      });
+      htmlForm += `</div>`;
+
+      Swal.fire({
+        title: `Calificar: ${nombreAlumno}`,
+        subtitle: act.nombre,
+        html: htmlForm,
+        showCancelButton: true,
+        confirmButtonText: 'Guardar Notas',
+        cancelButtonText: 'Cancelar',
+        preConfirm: () => {
+          let calificaciones = [];
+          let inputs = document.querySelectorAll('.eval-input');
+          let errorRango = false;
+
+          inputs.forEach(inp => {
+            let val = inp.value.trim();
+            let crit = inp.getAttribute('data-criterio');
+            
+            if (val !== "") {
+              let num = parseFloat(val);
+              if (isNaN(num) || num < 0 || num > 10) {
+                errorRango = true;
+              }
+              if (num === 0) {
+                calificaciones.push({ criterio: crit, valor: "" });
+              } else {
+                calificaciones.push({ criterio: crit, valor: num });
+              }
+            } else {
+              calificaciones.push({ criterio: crit, valor: "" });
+            }
+          });
+
+          if (errorRango) {
+            Swal.showValidationMessage('Las notas deben ser valores entre 1 y 10 (o 0 para borrar).');
+            return false;
+          }
+          return calificaciones;
+        }
+      }).then(res => {
+        if (res.isConfirmed && res.value) {
+          Swal.fire({ title: 'Guardando calificaciones...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+          
+          google.script.run
+            .withSuccessHandler(r => {
+              if (r.exito) {
+                renderizar(); 
+                Swal.fire({ title: '¡Notas actualizadas!', icon: 'success', timer: 1000, showConfirmButton: false });
+              } else {
+                Swal.fire('Error', r.mensaje, 'error');
+              }
+            })
+            .withFailureHandler(err => {
+              Swal.fire('Error en la comunicación', err.message || err, 'error');
+            })
+            .guardarNotasEvaluacion(nombreAlumno, a, n, g, document.getElementById('selUnidad').value, res.value);
+        }
+      });
+    }
+    
+    async function agregarNuevoAlumnoGAS() {
+      const areaActual = document.getElementById('selArea').value;
+      const nivelActual = document.getElementById('selNivel').value;
+      const grupoActual = document.getElementById('selGrupo').value;
+
+      const { value: nombreAlumno } = await Swal.fire({
+        title: 'Añadir Nuevo Alumno',
+        text: `El alumno se registrará en tu Google Sheets en la clase: ${nivelActual} - Grupo ${grupoActual}`,
+        input: 'text',
+        inputPlaceholder: 'Apellidos, Nombre...',
+        showCancelButton: true,
+        confirmButtonText: 'Inscribir en la nube',
+        cancelButtonText: 'Cancelar',
+        inputValidator: (value) => {
+          if (!value || !value.trim()) return '¡El nombre no puede estar vacío!';
+          let existe = conf.alumnos.some(al => al.nombre.toLowerCase().trim() === value.toLowerCase().trim());
+          if (existe) return 'Ya existe un alumno con ese nombre en este cuaderno.';
+        }
+      });
+
+      if (!nombreAlumno) return;
+      const nombreLimpio = nombreAlumno.trim();
+
+      conf.alumnos.push({ nombre: nombreLimpio, nivel: nivelActual, grupo: grupoActual });
+      conf.alumnos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+      Swal.fire({ title: 'Sincronizando con Google Sheets...', text: 'Por favor espera.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+      google.script.run
+        .withSuccessHandler((resultado) => {
+          if (resultado.exito) {
+            renderizar(); 
+            Swal.fire({ title: '¡Alumno Integrado!', text: `${nombreLimpio} añadido y ordenado.`, icon: 'success', timer: 2000, showConfirmButton: false });
+          } else {
+            Swal.fire('Error al guardar', resultado.mensaje, 'error');
+          }
+        })
+        .withFailureHandler((err) => { Swal.fire('Error Crítico', 'Fallo: ' + err, 'error'); })
+        .registrarNuevoAlumnoEnSheet(nombreLimpio, nivelActual, grupoActual);
+    }
+
+    function escapeReg(str) { 
+      return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"'); 
+    }
+
+  </script>
+</body>
+</html>

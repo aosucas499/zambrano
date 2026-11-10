@@ -1,41 +1,49 @@
-# Implementación: Renombrado a "Cuaderno de Zambrano" e Integración Google Drive
+# Plan de Implementación: Asignación de Áreas por Unidad y Corrección Visual de la Sábana Global
 
-Actualización de la marca de la aplicación y configuración de OAuth 2.0 para acceso a Google Drive.
-
-## Decisiones Críticas y Revisión del Usuario
-
-> [!IMPORTANT]
-> - **Cambio de Nombre**: Se renombrará la app en `metadata.json`, `strings.xml`, `settings.gradle.kts` y en todas las referencias del código (PDF, mensajes WhatsApp, tests) a "Cuaderno de Zambrano".
-> - **Nuevo Icono**: Se utilizará `ic_teacher_planner.jpg` para generar el nuevo icono adaptativo de la app.
-> - **Google Drive OAuth**: Implementaremos el flujo de OAuth 2.0 para que puedas vincular tu cuenta `g.educaand.es` y gestionar tus archivos CSV de forma segura en tu unidad de Drive.
+Este plan aborda las dos necesidades indicadas por el usuario:
+1. **Asignación personalizada de áreas curriculares por unidad al importar el alumnado**: Cada unidad seleccionada contará con un selector/desplegable de áreas para permitir impartir diferentes materias en diferentes grupos.
+2. **Corrección visual y estructural de la Sábana Global de Evaluación**: Sustituir el botón comprimido por una barra de acciones horizontal dedicada y espaciosa sobre la tabla matriz, asegurando que las medias de criterios y la media global de cada alumno se calculen y muestren con total legibilidad.
 
 ---
 
-## 1. Visión General y Concepto Principal
+## 1. Asignación de Áreas por Unidad en la Importación (`ResumenScreen.kt` & `DocenteViewModel.kt`)
 
-### Qué se entrega
-1. **Renombrado Integral**: Cambio de "Planificador Docente" a "Cuaderno de Zambrano" en todos los archivos del proyecto, incluyendo el manifiesto, los recursos de texto y los mensajes generados por la app.
-2. **Nuevo Icono Adaptativo**: Configuración del icono corporativo a partir de la imagen proporcionada.
-3. **Integración con Google Drive**: Configuración segura de OAuth 2.0 para permitir el acceso a archivos de tu cuenta `g.educaand.es` y facilitar la importación/exportación de archivos CSV directamente a tu Drive.
+### Cambios en la UI (`DialogoSelectorUnidades`):
+- Rediseñar `DialogoSelectorUnidades` para que cada unidad muestre:
+  - Checkbox de activación de la unidad y nombre del grupo (ej. *1ºA*, *3ºB*).
+  - Selector desplegable/expandible que muestra la lista de áreas oficiales (obtenidas de los criterios de evaluación: *Lengua Castellana y Literatura, Matemáticas, Conocimiento del Medio, Educación Física, Educación Artística, Lengua Extranjera (Inglés), Segunda Lengua Extranjera (Francés)*).
+  - Checkboxes o chips interactivos para marcar qué áreas imparte el docente en esa unidad específica.
+  - Opciones rápidas por unidad: "Todas las áreas" o marcar áreas individuales.
+
+### Persistencia y Gestión en ViewModel (`DocenteViewModel.kt`):
+- Almacenar el mapa `Map<String, List<String>>` (Unidad $\to$ Lista de Áreas seleccionadas) en la base de datos local / preferencias (`ConfiguracionApp` / `ConfiguracionDao`).
+- Actualizar `areasEvaluacionDisponibles`:
+  - Cuando se selecciona un grupo o unidad en la pestaña de Evaluación o en la creación de actividades, el selector de áreas filtrará automáticamente para mostrar **únicamente las áreas asignadas a esa unidad**.
+  - Si una unidad no tiene áreas restringidas o es nueva, por defecto ofrece todas las áreas del currículo.
 
 ---
 
-## 2. Experiencia de Usuario y Diseño Visual
+## 2. Rediseño de la Barra de Acciones y Sábana Global (`SeccionEvaluacion.kt`)
 
-- **Nueva Identidad**: La app se identificará bajo la marca "Cuaderno de Zambrano".
-- **Flujo de Integración**: Se añadirá un botón o acción en la pestaña "Importar Archivos" para vincular tu cuenta de Google. Una vez autorizado, se mostrará un selector de archivos de Google Drive para cargar directamente tus CSV.
+### Solución al problema de deformación visual:
+- **Causa identificada**: En `SeccionEvaluacion.kt`, el texto descriptivo del grupo y el botón de PDF compartían una fila sin restricciones de peso (`Modifier.weight`), provocando que el texto empujara el botón contra el borde derecho y lo transformara en una tira vertical ilegible.
+- **Nueva Barra de Acciones Horizontal**:
+  - Implementar una barra o tarjeta horizontal (`Card` / `Surface`) estilizada con M3 sobre la tabla global.
+  - Disposición clara:
+    - Izquierda: Título *"Sábana Global de Criterios"* con insignia del grupo seleccionado y número de alumnos evaluados.
+    - Derecha: Botón de acción con tamaño óptimo y padding táctil (mínimo 48dp) con icono `PictureAsPdf` y texto *"Informe PDF Global"*, garantizando que nunca se comprima.
+  - Selector de áreas para la sábana global: permite ver la sábana global de un área concreta o de todas las asignadas al grupo.
+
+### Renderizado de la Matriz Global (`TablaGlobalMatriz`):
+- Columna fija inicial: Apellidos y Nombre de cada alumno (ordenado alfabéticamente según Séneca).
+- Columnas intermedias con desplazamiento horizontal: cada criterio evaluado en las SdAs del curso con su media aritmética (ej. *CE.1.1*, *CE.1.2*...).
+- Columna final destacada: **Media Global** de todas las calificaciones del alumno con código de color (aprobado/notable/sobresaliente/insuficiente).
+- Fila inferior de resumen: Media global del grupo por criterio.
 
 ---
 
-## 3. Plan de Cambios Específicos
+## 3. Verificación y Empaquetado
 
-1. **Renombrado del Proyecto**:
-   - Actualizar `metadata.json`, `strings.xml` y `settings.gradle.kts`.
-   - Refactorizar las referencias en `ShareUtils.kt`, `PdfExporter.kt` y `ExampleUnitTest.kt`.
-2. **Icono Adaptativo**:
-   - Utilizar `app-icon-generation` para crear el nuevo icono a partir de `ic_teacher_planner.jpg`.
-3. **Integración OAuth 2.0 (Google Drive)**:
-   - Invocar el flujo `set_up_oauth` para solicitar acceso al scope `drive.file` (acceso limitado a archivos creados por la app).
-   - Crear una interfaz en `SeccionImportacionArchivos` para activar la vinculación y abrir el selector de archivos de Drive (`ActivityResultContracts.PickVisualMedia` o API de Google Picker para archivos de Drive).
-4. **Verificación**:
-   - `compile_applet` y tests unitarios.
+- Compilar con `compile_applet` para certificar la ausencia de errores de sintaxis y tipos en Kotlin y Jetpack Compose.
+- Generar el APK actualizado mediante `./gradlew assembleDebug` y asegurar su copia como `cuaderno de zambrano.apk` y `Cuaderno de Zambrano.apk`.
+- Verificar la navegación y el flujo de trabajo completo: Importación $\to$ Selección de Áreas por Unidad $\to$ Creación de Actividades $\to$ Visualización de la Sábana Global $\to$ Exportación a PDF y Séneca.

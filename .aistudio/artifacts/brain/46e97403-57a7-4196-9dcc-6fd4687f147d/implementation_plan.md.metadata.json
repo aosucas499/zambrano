@@ -1,6 +1,6 @@
 {
-  "summary":  "Plan de implementación para cambiar el nombre de la app a 'Cuaderno de Zambrano', actualizar el icono usando la imagen proporcionada y configurar la integración OAuth 2.0 para acceder a Google Drive (importar/exportar CSV).",
-  "updatedAt":  "2026-11-09T00:00:14.195376613Z",
+  "summary":  "Plan de implementación para la selección personalizada de áreas por unidad durante la importación del alumnado y la reestructuración visual de la Sábana Global de Evaluación con barra horizontal de acciones y cálculo de medias.",
+  "updatedAt":  "2026-11-10T17:20:23.492874801Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

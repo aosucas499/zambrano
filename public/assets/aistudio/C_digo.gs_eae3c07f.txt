@@ -1,0 +1,551 @@
+function doGet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hConfig = ss.getSheetByName("Config");
+  const configurado = (hConfig && hConfig.getLastRow() >= 2);
+  return HtmlService.createTemplateFromFile(configurado ? 'Index' : 'Bienvenida')
+      .evaluate()
+      .setTitle('Cuaderno de Evaluación')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function getAppUrl() { return ScriptApp.getService().getUrl(); }
+
+function obtenerAreasMaestras() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName("Criterios_Master");
+  if (!hoja) return [];
+  return [...new Set(hoja.getDataRange().getValues().slice(1).map(f => f[0]))].filter(String).sort();
+}
+
+function configurarEspecialistaCompleto(nombre, asignaciones, alumnosPorClave) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  let hConfig = ss.getSheetByName("Config") || ss.insertSheet("Config");
+  hConfig.clear();
+  hConfig.appendRow(["Maestro", nombre]);
+  hConfig.appendRow(["Asignaciones", JSON.stringify(asignaciones)]);
+
+  ["Alumnos", "Actividades_Def"].forEach(n => {
+    let h = ss.getSheetByName(n);
+    if (h) h.clear(); else ss.insertSheet(n);
+  });
+  
+  const hAlu = ss.getSheetByName("Alumnos");
+  const hAct = ss.getSheetByName("Actividades_Def");
+
+  hAlu.appendRow(["Nombre", "Nivel", "Grupo", ""]);
+  let filasAlu = [];
+  
+  for (let clave in alumnosPorClave) {
+    let partes = clave.split('_');
+    let nivel = partes[0];
+    let grupo = partes[1];
+    let listaNombres = alumnosPorClave[clave].split('\n');
+    
+    listaNombres.forEach(nombreAl => {
+      let nombreLimpio = nombreAl.trim();
+      if (nombreLimpio !== "") {
+        filasAlu.push([nombreLimpio, nivel, grupo, ""]); 
+      }
+    });
+  }
+  
+  if (filasAlu.length > 0) {
+    hAlu.getRange(2, 1, filasAlu.length, 4).setValues(filasAlu);
+  }
+
+  hAct.appendRow(["ID", "Nombre", "Área", "Curso", "Grupo", "Unidad", "CriteriosJSON"]);
+
+  return "OK";
+}
+
+function obtenerPaqueteEvaluacion(a, c, g, u) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hAct = ss.getSheetByName("Actividades_Def");
+  
+  let nCorto = String(c).match(/\d+/) ? String(c).match(/\d+/)[0] : String(c).substring(0,2);
+  let aCorto = String(a).substring(0, 12);
+  let nombreHojaLimpio = (u + "_" + aCorto + "_" + nCorto + g).substring(0, 31);
+  const hCal = ss.getSheetByName(nombreHojaLimpio);
+  
+  let acts = [];
+  if (hAct && hAct.getLastRow() > 1) {
+    acts = hAct.getDataRange().getValues().slice(1)
+      .filter(f => f[2] === a && f[3] === c && f[4] === g && f[5] === u) 
+      .map(f => ({ id: f[0], nombre: f[1], criterios: JSON.parse(f[6]) }));
+  }
+  return { actividades: acts, notasActuales: hCal ? hCal.getDataRange().getValues() : [] };
+}
+
+function crearEstructuraActividad(n, a, c, g, u, cr) {
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hAct = ss.getSheetByName("Actividades_Def") || ss.insertSheet("Actividades_Def");
+  
+  if (hAct.getLastRow() === 0) {
+    hAct.appendRow(["ID", "Nombre", "Área", "Curso", "Grupo", "Unidad", "CriteriosJSON"]);
+  } else {
+    let datos = hAct.getDataRange().getValues().slice(1);
+    let duplicado = datos.find(f => String(f[1]).trim().toLowerCase() === String(n).trim().toLowerCase() && f[2] === a && f[3] === c && f[4] === g && f[5] === u);
+    if (duplicado) return "DUPLICADO";
+  }
+
+  hAct.appendRow([Utilities.getUuid(), n, a, c, g, u, JSON.stringify(cr)]);
+  
+  let nCorto = String(c).match(/\d+/) ? String(c).match(/\d+/)[0] : String(c).substring(0,2);
+  let aCorto = String(a).substring(0, 12);
+  let nombreHojaLimpio = (u + "_" + aCorto + "_" + nCorto + g).substring(0, 31);
+  
+  let hCal = ss.getSheetByName(nombreHojaLimpio);
+  let esNueva = false;
+  
+  if (!hCal) {
+    hCal = ss.insertSheet(nombreHojaLimpio);
+    esNueva = true;
+  }
+  
+  let hMaster = ss.getSheetByName("Criterios_Master");
+  let filasMaster = hMaster ? hMaster.getDataRange().getValues() : [];
+  
+  if (esNueva) {
+    hCal.appendRow(["Alumno", "Área"]);
+    hCal.appendRow(["", ""]); 
+    
+    let hAlu = ss.getSheetByName("Alumnos");
+    let alumnosFiltrados = [];
+    if (hAlu && hAlu.getLastRow() > 1) {
+      let todosAlu = hAlu.getDataRange().getValues().slice(1);
+      alumnosFiltrados = todosAlu.filter(f => String(f[1]).trim() === String(c).trim() && String(f[2]).trim() === String(g).trim()).map(f => f[0]);
+    }
+    
+    if (alumnosFiltrados.length > 0) {
+      let filasNuevas = alumnosFiltrados.map(nom => [nom, a]);
+      hCal.getRange(3, 1, filasNuevas.length, 2).setValues(filasNuevas);
+    }
+  }
+  
+  let cabCriterios = hCal.getRange(1, 1, 1, hCal.getLastColumn()).getValues()[0];
+  
+  cr.forEach(criterioObj => {
+    let cod = criterioObj.codigo;
+    let idx = cabCriterios.indexOf(cod);
+    if (idx === -1) {
+      let colNueva = hCal.getLastColumn() + 1;
+      
+      hCal.getRange(1, colNueva).setValue(cod).setFontWeight("bold").setHorizontalAlignment("center");
+      
+      let compEncontrada = "1"; 
+      let filaM = filasMaster.find(f => {
+        let areaOk = String(f[0]).trim().toLowerCase() === String(a).trim().toLowerCase();
+        let codOk = String(f[4]).trim() === String(cod).trim();
+        let mExcel = String(f[2]).match(/\d+/);
+        let mFiltro = String(c).match(/\d+/);
+        let nivelOk = (mExcel && mFiltro) ? mExcel[0] === mFiltro[0] : String(f[2]).trim().toLowerCase() === String(c).trim().toLowerCase();
+        return areaOk && nivelOk && codOk;
+      });
+
+      if (filaM) {
+        compEncontrada = filaM[3]; 
+      }
+      hCal.getRange(2, colNueva).setValue(compEncontrada).setFontWeight("bold").setHorizontalAlignment("center").setBackground("#e9ecef");
+      
+      cabCriterios = hCal.getRange(1, 1, 1, hCal.getLastColumn()).getValues()[0];
+    }
+  });
+  
+  actualizarHojaGlobal(a, c, g);
+  return "OK";
+}
+
+// 🌐 NOMBRE DE FUNCIÓN VINCULADO CORRECTAMENTE CON LA INTERFAZ WEB
+function guardarNotasEvaluacion(alumno, area, nivel, grupo, unidad, paqueteNotas) {
+  try {
+    let ss = SpreadsheetApp.getActiveSpreadsheet();
+    let nCorto = String(nivel).match(/\d+/) ? String(nivel).match(/\d+/)[0] : String(nivel).substring(0,2);
+    let aCorto = String(area).substring(0, 12);
+    
+    let nombreHojaLimpio = (unidad + "_" + aCorto + "_" + nCorto + grupo).substring(0, 31);
+    let hCal = ss.getSheetByName(nombreHojaLimpio);
+    
+    if (!hCal) {
+      throw new Error("No se encuentra la pestaña de evaluación: " + nombreHojaLimpio);
+    }
+    
+    let datos = hCal.getDataRange().getValues();
+    let filaCriterios = datos[0]; // Fila 1 de la pestaña (Códigos de criterios)
+    
+    // 1. Encontrar la fila correspondiente al alumno
+    let filaAlumnoIdx = -1;
+    for (let r = 2; r < datos.length; r++) {
+      if (String(datos[r][0]).trim() === String(alumno).trim()) {
+        filaAlumnoIdx = r + 1; // Conversión a índice de base 1 de Sheets
+        break;
+      }
+    }
+    
+    if (filaAlumnoIdx === -1) {
+      throw new Error("No se encontró al alumno " + alumno + " en la pestaña actual.");
+    }
+    
+    // 2. Procesar e inyectar el paquete de notas procesado desde la web
+    paqueteNotas.forEach(item => {
+      let codigoBuscado = String(item.criterio).trim(); // Extrae la propiedad 'criterio' generada en Index.html
+      let notaNueva = item.valor;                     // Extrae el 'valor' enviado
+      
+      // Recorremos las columnas desde la C en adelante (índice 2)
+      for (let col = 2; col < filaCriterios.length; col++) {
+        if (String(filaCriterios[col]).trim() === codigoBuscado) {
+          // Asigna el número o limpia la celda (si viene cadena vacía "")
+          hCal.getRange(filaAlumnoIdx, col + 1).setValue(notaNueva);
+          break; 
+        }
+      }
+    });
+    
+    // 3. Forzar refresco inmediato de los promedios globales consolidados
+    actualizarHojaGlobal(area, nivel, grupo);
+    
+    return { exito: true };
+  } catch (e) {
+    Logger.log("Error en guardarNotasEvaluacion: " + e.message);
+    return { exito: false, mensaje: e.message };
+  }
+}
+
+function actualizarHojaGlobal(area, nivel, grupo) {
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  let nCorto = String(nivel).match(/\d+/) ? String(nivel).match(/\d+/)[0] : String(nivel).substring(0,2);
+  let aCorto = String(area).substring(0, 12);
+  
+  let nombreGlobal = ("GLOBAL_" + aCorto + "_" + nCorto + grupo).substring(0, 31);
+  let hGlobal = ss.getSheetByName(nombreGlobal);
+  
+  if (!hGlobal) {
+    hGlobal = ss.insertSheet(nombreGlobal, 1); 
+  } else {
+    hGlobal.clear(); 
+  }
+  
+  let hMaster = ss.getSheetByName("Criterios_Master");
+  let crits = [];
+  if (hMaster) {
+    let datosM = hMaster.getDataRange().getValues().slice(1);
+    datosM.forEach(f => {
+      let areaOk = String(f[0]).trim().toLowerCase() === String(area).trim().toLowerCase();
+      let mExcel = String(f[2]).match(/\d+/);
+      let mFiltro = String(nivel).match(/\d+/);
+      let nivelOk = (mExcel && mFiltro) ? mExcel[0] === mFiltro[0] : String(f[2]).trim().toLowerCase() === String(nivel).trim().toLowerCase();
+      if (areaOk && nivelOk) {
+        crits.push({ cod: String(f[4]).trim(), comp: String(f[3]).trim() });
+      }
+    });
+  }
+  if (crits.length === 0) return; 
+  
+  let hAlu = ss.getSheetByName("Alumnos");
+  let alumnos = [];
+  if (hAlu && hAlu.getLastRow() > 1) {
+    let datosAlu = hAlu.getDataRange().getValues().slice(1);
+    alumnos = datosAlu.filter(f => {
+      let mExcel = String(f[1]).match(/\d+/);
+      let mFiltro = String(nivel).match(/\d+/);
+      let nivelOk = (mExcel && mFiltro) ? mExcel[0] === mFiltro[0] : String(f[1]).trim() === String(nivel).trim();
+      return nivelOk && String(f[2]).trim() === String(grupo).trim();
+    }).map(f => f[0]);
+  }
+  if (alumnos.length === 0) return;
+  
+  let notasAgrupadas = {};
+  alumnos.forEach(al => notasAgrupadas[al] = {});
+  
+  for (let i = 1; i <= 12; i++) {
+    let nombreSA = ("SA" + i + "_" + aCorto + "_" + nCorto + grupo).substring(0, 31);
+    let hSA = ss.getSheetByName(nombreSA);
+    
+    if (hSA && hSA.getLastRow() >= 3) {
+      let datosSA = hSA.getDataRange().getValues();
+      let cabCriterios = datosSA[0]; 
+      
+      for (let col = 2; col < cabCriterios.length; col++) {
+        let critCod = String(cabCriterios[col]).trim();
+        
+        if (critCod !== "") {
+          for (let r = 2; r < datosSA.length; r++) {
+            let al = datosSA[r][0];
+            let val = datosSA[r][col];
+            
+            if (notasAgrupadas[al] && val !== "" && val !== null && val !== undefined && val !== "—" && !isNaN(val)) {
+              if (!notasAgrupadas[al][critCod]) {
+                notasAgrupadas[al][critCod] = [];
+              }
+              notasAgrupadas[al][critCod].push(parseFloat(val));
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  let cabeceras = ["Alumno", "Área"];
+  let subCabeceras = ["", ""];
+  crits.forEach(c => {
+    cabeceras.push(c.cod);
+    subCabeceras.push(c.comp);
+  });
+  cabeceras.push("MEDIA");
+  subCabeceras.push("");
+  
+  let filasAEscribir = [cabeceras, subCabeceras];
+  
+  alumnos.forEach(al => {
+     let fila = [al, area];
+     crits.forEach(c => {
+        let arrayNotas = notasAgrupadas[al][c.cod];
+        if (arrayNotas && arrayNotas.length > 0) {
+           let media = arrayNotas.reduce((sum, n) => sum + n, 0) / arrayNotas.length;
+           fila.push(media);
+        } else {
+           fila.push("-"); 
+        }
+     });
+     fila.push(""); 
+     filasAEscribir.push(fila);
+  });
+  
+  hGlobal.getRange(1, 1, filasAEscribir.length, cabeceras.length).setValues(filasAEscribir);
+  hGlobal.getRange(1, 1, 1, cabeceras.length).setFontWeight("bold").setHorizontalAlignment("center").setBackground("#d9ead3");
+  hGlobal.getRange(2, 1, 1, cabeceras.length).setFontWeight("bold").setHorizontalAlignment("center").setBackground("#e9ecef").setFontColor("#666666");
+  
+  hGlobal.setFrozenRows(2);
+  hGlobal.setFrozenColumns(1);
+  
+  if (filasAEscribir.length > 2) {
+     hGlobal.getRange(3, 3, filasAEscribir.length - 2, crits.length).setNumberFormat("0.00").setHorizontalAlignment("center");
+     
+     let colUltimoCritLetra = columnToLetter(cabeceras.length - 1);
+     let formulas = [];
+     for (let i = 3; i <= filasAEscribir.length; i++) {
+        formulas.push([`=CALCULAR_MEDIA_COMPETENCIAS(C${i}:${colUltimoCritLetra}${i}; C$2:${colUltimoCritLetra}$2)`]);
+     }
+     hGlobal.getRange(3, cabeceras.length, formulas.length, 1).setFormulas(formulas);
+     hGlobal.getRange(3, cabeceras.length, formulas.length, 1).setNumberFormat("0.00").setBackground("#fff2cc").setFontWeight("bold");
+  }
+}
+
+function obtenerCriteriosFiltrados(a, c) {
+  if (!a || !c) return [];
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName("Criterios_Master");
+  if (!hoja) return [];
+  
+  const valores = hoja.getDataRange().getValues().slice(1);
+  
+  return valores
+    .filter(f => {
+      let areaCoincide = String(f[0]).trim().toLowerCase() === String(a).trim().toLowerCase();
+      let matchExcel = String(f[2]).match(/\d+/);
+      let matchFiltro = String(c).match(/\d+/);
+      let nivelCoincide = false;
+      if (matchExcel && matchFiltro) {
+        nivelCoincide = matchExcel[0] === matchFiltro[0];
+      } else {
+        nivelCoincide = String(f[2]).trim().toLowerCase() === String(c).trim().toLowerCase();
+      }
+      return areaCoincide && nivelCoincide;
+    })
+    .map(f => ({
+      codigo: String(f[4]).trim(), 
+      desc: String(f[5]).trim()
+    }));
+}
+
+function obtenerDatosConfig() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hConfig = ss.getSheetByName("Config");
+  if (!hConfig) return null;
+  const asigRow = hConfig.getDataRange().getValues().find(f => f[0] === "Asignaciones");
+  if (!asigRow) return null;
+  const asig = JSON.parse(asigRow[1]);
+  const alus = ss.getSheetByName("Alumnos").getDataRange().getValues().slice(1).map(f => ({nombre:f[0], nivel:f[1], grupo:f[2]}));
+  return { areas: Object.keys(asig), asignaciones: asig, alumnos: alus };
+}
+
+function columnToLetter(column) {
+  let temp, letter = "";
+  while (column > 0) {
+    temp = (column - 1) % 26;
+    letter = String.fromCharCode(temp + 65) + letter;
+    column = (column - temp - 1) / 26;
+  }
+  return letter;
+}
+
+function CALCULAR_MEDIA_COMPETENCIAS(notas, competencies) {
+  if (!notas || !competencies) return "";
+  let filaNotas = notas[0] || notas;
+  let filaComps = competencies[0] || competencies;
+  let sumasPorComp = {};
+  let contadoresPorComp = {};
+
+  filaComps.forEach((comp, i) => {
+    let nota = filaNotas[i];
+    if (comp !== "" && comp !== null && nota !== "" && nota !== "-" && !isNaN(nota) && nota !== null) {
+      let idComp = comp.toString().trim(); 
+      if (!sumasPorComp[idComp]) {
+        sumasPorComp[idComp] = 0;
+        contadoresPorComp[idComp] = 0;
+      }
+      sumasPorComp[idComp] += parseFloat(nota);
+      contadoresPorComp[idComp]++;
+    }
+  });
+
+  let mediasDeCompetencias = [];
+  for (let id in sumasPorComp) {
+    mediasDeCompetencias.push(sumasPorComp[id] / contadoresPorComp[id]);
+  }
+  if (mediasDeCompetencias.length === 0) return "";
+  let sumaFinal = mediasDeCompetencias.reduce((a, b) => a + b, 0);
+  return sumaFinal / mediasDeCompetencias.length;
+}
+
+function onEdit(e) {
+  if (!e || !e.range) return;
+  let hoja = e.range.getSheet();
+  let nombreHoja = hoja.getName();
+
+  if (nombreHoja.startsWith("SA")) {
+    let filaEditada = e.range.getRow();
+    if (filaEditada >= 3) {
+      let alumno = hoja.getRange(filaEditada, 1).getValue();
+      let area = hoja.getRange(filaEditada, 2).getValue(); 
+      
+      if (alumno && area) {
+        let ss = e.source;
+        let hAlu = ss.getSheetByName("Alumnos");
+        if (hAlu) {
+          let datosAlu = hAlu.getDataRange().getValues().slice(1);
+          let filaAlu = datosAlu.find(f => f[0] === alumno);
+          if (filaAlu) {
+            actualizarHojaGlobal(area, filaAlu[1], filaAlu[2]);
+          }
+        }
+      }
+    }
+  }
+}
+
+function registrarNuevoAlumnoEnSheet(nombre, nivel, grupo) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Alumnos");
+    if (!sheet) return { exito: false, mensaje: "No se encontró la pestaña 'Alumnos'." };
+    
+    sheet.appendRow([nombre, nivel, grupo, ""]);
+    return { exito: true };
+  } catch (error) {
+    return { exito: false, mensaje: error.toString() };
+  }
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('🛠️ Cuaderno')
+    .addItem('Ordenar Pestañas', 'ordenarPestanas')
+    .addToUi();
+}
+
+function ordenarPestanas() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hojas = ss.getSheets();
+  const principales = ["Alumnos", "Actividades_Def", "Config"];
+  let hojasGlobales = [], hojasSA = [];
+  
+  hojas.forEach(h => {
+    let nombre = h.getName();
+    if (nombre.startsWith("GLOBAL")) hojasGlobales.push(h);
+    else if (nombre.startsWith("SA")) hojasSA.push(h);
+  });
+  
+  hojasGlobales.sort((a, b) => a.getName().localeCompare(b.getName()));
+  hojasSA.sort((a, b) => {
+    let numA = a.getName().match(/\d+/) ? parseInt(a.getName().match(/\d+/)[0]) : 0;
+    let numB = b.getName().match(/\d+/) ? parseInt(b.getName().match(/\d+/)[0]) : 0;
+    return numA === numB ? a.getName().localeCompare(b.getName()) : numA - numB;
+  });
+
+  let posicion = 1;
+  principales.forEach(nombre => { let h = ss.getSheetByName(nombre); if (h) { ss.setActiveSheet(h); ss.moveActiveSheet(posicion++); } });
+  hojasGlobales.forEach(h => { ss.setActiveSheet(h); ss.moveActiveSheet(posicion++); });
+  hojasSA.forEach(h => { ss.setActiveSheet(h); ss.moveActiveSheet(posicion++); });
+  
+  let hMaster = ss.getSheetByName("Criterios_Master");
+  if (hMaster) { ss.setActiveSheet(hMaster); ss.moveActiveSheet(ss.getSheets().length); }
+  
+  let hAlumnos = ss.getSheetByName("Alumnos");
+  if (hAlumnos) ss.setActiveSheet(hAlumnos);
+  SpreadsheetApp.getUi().alert("✅ ¡Pestañas ordenadas!");
+}
+
+function eliminarActividadCompleta(idActividadReal, area, nivel, grupo) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var hAct = ss.getSheetByName("Actividades_Def");
+    
+    if (!hAct) {
+      throw new Error("No se encontró la pestaña 'Actividades_Def'");
+    }
+    
+    var datos = hAct.getDataRange().getValues();
+    var filaBorrada = false;
+    var idBuscado = String(idActividadReal).trim(); 
+    
+    for (var i = datos.length - 1; i >= 1; i--) {
+      var idColA = String(datos[i][0]).trim(); 
+      
+      if (idColA === idBuscado) {
+        hAct.deleteRow(i + 1); 
+        filaBorrada = true;
+        break; 
+      }
+    }
+    
+    if (!filaBorrada) {
+      return { exito: false, mensaje: "No se encontró ningún registro con el ID único en Actividades_Def." };
+    }
+    
+    try {
+      actualizarHojaGlobal(area, nivel, grupo);
+    } catch(eG) {
+      Logger.log("Sábana global omitida en el borrado: " + eG.message);
+    }
+    
+    return { exito: true };
+  } catch (e) {
+    Logger.log("Error en eliminarActividadCompleta: " + e.message);
+    return { exito: false, mensaje: e.message };
+  }
+}
+
+function obtenerMatrizGlobalParaTabla(area, nivel, grupo) {
+  try {
+    let ss = SpreadsheetApp.getActiveSpreadsheet();
+    let nCorto = String(nivel).match(/\d+/) ? String(nivel).match(/\d+/)[0] : String(nivel).substring(0,2);
+    let aCorto = String(area).substring(0, 12);
+    
+    let nombreGlobal = ("GLOBAL_" + aCorto + "_" + nCorto + grupo).substring(0, 31);
+    let hGlobal = ss.getSheetByName(nombreGlobal);
+    
+    if (!hGlobal) {
+      actualizarHojaGlobal(area, nivel, grupo);
+      hGlobal = ss.getSheetByName(nombreGlobal);
+    }
+    
+    if (!hGlobal || hGlobal.getLastRow() === 0) {
+      return [];
+    }
+    
+    return hGlobal.getDataRange().getValues();
+  } catch (e) {
+    return [];
+  }
+}

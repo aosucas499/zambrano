@@ -43,17 +43,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.DocenteViewModel
 import com.example.ui.components.AjustesHorarioDialog
+import com.example.ui.components.CalificarAlumnoDialog
+import com.example.ui.components.CrearActividadDialog
 import com.example.ui.components.EditClaseDialog
 import com.example.ui.components.EditHorarioSlotDialog
+import com.example.ui.components.GestionActividadesDialog
 import com.example.ui.screens.AlumnosScreen
 import com.example.ui.screens.DiarioScreen
 import com.example.ui.screens.ResumenScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.util.CsvParser
 
 enum class AppDestino(val titulo: String) {
     DIARIO("Diario de Clases"),
     ALUMNADO("Alumnado y Conducta"),
-    RESUMEN("Resumen e Informes")
+    RESUMEN("Evaluación")
 }
 
 class MainActivity : ComponentActivity() {
@@ -82,6 +86,15 @@ class MainActivity : ComponentActivity() {
                 val registrosAlumnoDetalle by viewModel.detalleRegistrosAlumno.collectAsStateWithLifecycle()
                 val totalPositivosCurso by viewModel.detallePositivosTotal.collectAsStateWithLifecycle()
                 val totalNegativosCurso by viewModel.detalleNegativosTotal.collectAsStateWithLifecycle()
+
+                // Flujos del módulo de Evaluación LOMLOE
+                val cursosEvaluacion by viewModel.cursosEvaluacionDisponibles.collectAsStateWithLifecycle()
+                val areasEvaluacion by viewModel.areasEvaluacionDisponibles.collectAsStateWithLifecycle()
+                val criteriosEvaluacion by viewModel.criteriosEvaluacionFiltrados.collectAsStateWithLifecycle()
+                val actividadesEvaluacion by viewModel.actividadesSdaActual.collectAsStateWithLifecycle()
+                val todasLasActividades by viewModel.todasLasActividades.collectAsStateWithLifecycle()
+                val notasEvaluacion by viewModel.notasClaseActual.collectAsStateWithLifecycle()
+                val alumnosEvaluacion by viewModel.alumnosEvaluacion.collectAsStateWithLifecycle()
 
                 var destinoActual by remember { mutableStateOf(AppDestino.DIARIO) }
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -114,14 +127,25 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             actions = {
-                                // Rueda dentada para ajustar horario semanal o docente activo
+                                // Rueda dentada: en Evaluación abre la gestión de actividades; en Diario abre ajustes de horario
                                 IconButton(
-                                    onClick = { viewModel.abrirAjustesHorarioDialog() },
-                                    modifier = Modifier.testTag("btn_ajustes_horario_gear")
+                                    onClick = {
+                                        if (destinoActual == AppDestino.RESUMEN) {
+                                            viewModel.abrirGestionActividadesDialog()
+                                        } else {
+                                            viewModel.abrirAjustesHorarioDialog()
+                                        }
+                                    },
+                                    modifier = Modifier.testTag(
+                                        if (destinoActual == AppDestino.RESUMEN) "btn_ajustes_actividades_gear" else "btn_ajustes_horario_gear"
+                                    )
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Settings,
-                                        contentDescription = "Ajustar horario semanal y docente",
+                                        contentDescription = if (destinoActual == AppDestino.RESUMEN)
+                                            "Gestión de actividades de evaluación"
+                                        else
+                                            "Ajustar horario semanal y docente",
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -171,10 +195,10 @@ class MainActivity : ComponentActivity() {
                                     Icon(
                                         imageVector = if (destinoActual == AppDestino.RESUMEN)
                                             Icons.Default.Assessment else Icons.Outlined.Assessment,
-                                        contentDescription = "Resumen"
+                                        contentDescription = "Evaluación"
                                     )
                                 },
-                                label = { Text("Resumen") },
+                                label = { Text("Evaluación") },
                                 modifier = Modifier.testTag("nav_item_resumen")
                             )
                         }
@@ -229,21 +253,32 @@ class MainActivity : ComponentActivity() {
 
                             AppDestino.RESUMEN -> ResumenScreen(
                                 uiState = uiState,
-                                totalClases = totalClases,
-                                totalCompletadas = totalCompletadas,
-                                totalSlotsSemanales = todosLosSlots.size,
-                                totalPositivos = totalPositivos,
-                                totalNegativos = totalNegativos,
                                 companeros = companeros,
-                                onCompartirWhatsApp = { viewModel.compartirPorWhatsApp(context) },
-                                onExportarPdf = { viewModel.exportarPdf(context) },
+                                cursosDisponibles = cursosEvaluacion,
+                                areasDisponibles = areasEvaluacion,
+                                criterios = criteriosEvaluacion,
+                                actividades = actividadesEvaluacion,
+                                notas = notasEvaluacion,
+                                alumnosEvaluacion = alumnosEvaluacion,
+                                onCambiarModoEvaluacion = { viewModel.cambiarModoEvaluacion(it) },
+                                onCambiarUnidadSda = { viewModel.cambiarUnidadSda(it) },
+                                onCambiarCursoEvaluacion = { viewModel.cambiarCursoEvaluacion(it) },
+                                onCambiarAreaEvaluacion = { viewModel.cambiarAreaEvaluacion(it) },
+                                onAbrirNuevaActividad = { viewModel.abrirDialogoNuevaActividad() },
+                                onEliminarActividad = { id, nom -> viewModel.eliminarActividad(id, nom) },
+                                onCalificarAlumno = { alu, act -> viewModel.abrirCalificacion(alu, act) },
+                                onExportarSeneca = { viewModel.exportarSdaSeneca(context) },
+                                onExportarPdfGlobal = { viewModel.exportarPdfGlobal(context) },
+                                onAbrirGestionActividades = { viewModel.abrirGestionActividadesDialog() },
                                 onBusquedaCompaneroChanged = { viewModel.setBusquedaCompaneros(it) },
                                 onImportarCsv = { uri, tipo ->
                                     viewModel.importarCsvUri(context, uri, tipo)
                                 },
                                 onToggleUnidadMarcada = { viewModel.toggleUnidadMarcada(it) },
                                 onMarcarTodasUnidades = { viewModel.marcarTodasUnidades(it) },
-                                onConfirmarImportacionUnidades = { viewModel.confirmarImportacionAlumnosConUnidadesMarcadas() },
+                                onConfirmarImportacionUnidades = { unidades, areas ->
+                                    viewModel.confirmarImportacionAlumnosConUnidadesMarcadas(unidades, areas)
+                                },
                                 onCancelarSeleccionUnidades = { viewModel.cancelarSeleccionUnidades() },
                                 onConfirmarDocenteFet = { bytes, doc -> viewModel.confirmarImportacionFet(bytes, doc) },
                                 onCancelarSeleccionFet = { viewModel.cancelarSeleccionDocenteFet() },
@@ -273,7 +308,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // Diálogo Ajustes de Horario y Docente (Rueda dentada ⚙️)
+                        // Diálogo Ajustes de Horario y Docente (Rueda dentada ⚙️ en Diario)
                         if (uiState.mostrarAjustesHorarioDialog) {
                             AjustesHorarioDialog(
                                 uiState = uiState,
@@ -284,6 +319,46 @@ class MainActivity : ComponentActivity() {
                                 onEditarSlot = { slot -> viewModel.abrirEditarSlot(slot) },
                                 onEliminarSlot = { slot -> viewModel.eliminarSlot(slot) },
                                 onDismiss = { viewModel.cerrarAjustesHorarioDialog() }
+                            )
+                        }
+
+                        // Diálogo para crear nueva actividad de evaluación
+                        if (uiState.mostrarDialogoNuevaActividad) {
+                            CrearActividadDialog(
+                                unidadSda = uiState.evaluacionUnidadSda,
+                                area = uiState.evaluacionAreaSeleccionada,
+                                curso = CsvParser.extraerCursoNumero(uiState.evaluacionCursoSeleccionado),
+                                grupo = uiState.evaluacionCursoSeleccionado,
+                                criteriosDisponibles = criteriosEvaluacion,
+                                onDismiss = { viewModel.cerrarDialogoNuevaActividad() },
+                                onCrear = { nombre, codigos ->
+                                    viewModel.crearNuevaActividad(nombre, codigos)
+                                }
+                            )
+                        }
+
+                        // Diálogo para calificar un alumno en una actividad
+                        val alumnoCalificando = uiState.alumnoParaCalificar
+                        val actividadCalificando = uiState.actividadParaCalificar
+                        if (alumnoCalificando != null && actividadCalificando != null) {
+                            CalificarAlumnoDialog(
+                                alumno = alumnoCalificando,
+                                actividad = actividadCalificando,
+                                criteriosCatalogo = criteriosEvaluacion,
+                                notasActuales = notasEvaluacion,
+                                onDismiss = { viewModel.cerrarCalificacion() },
+                                onGuardar = { calificaciones ->
+                                    viewModel.guardarCalificacionesAlumno(calificaciones)
+                                }
+                            )
+                        }
+
+                        // Diálogo para gestionar actividades (Rueda dentada ⚙️ en Evaluación)
+                        if (uiState.mostrarGestionActividadesDialog) {
+                            GestionActividadesDialog(
+                                actividades = todasLasActividades,
+                                onEliminarActividad = { id, nom -> viewModel.eliminarActividad(id, nom) },
+                                onDismiss = { viewModel.cerrarGestionActividadesDialog() }
                             )
                         }
                     }

@@ -9,12 +9,16 @@ import com.example.data.dao.CompaneroDao
 import com.example.data.dao.ConductaDao
 import com.example.data.dao.ConfiguracionDao
 import com.example.data.dao.DiarioDao
+import com.example.data.dao.EvaluacionDao
 import com.example.data.dao.HorarioDao
+import com.example.data.model.ActividadEvaluacion
 import com.example.data.model.Alumno
 import com.example.data.model.CompaneroCen
 import com.example.data.model.ConfiguracionApp
+import com.example.data.model.CriterioEvaluacion
 import com.example.data.model.DiarioClase
 import com.example.data.model.HorarioSlot
+import com.example.data.model.NotaEvaluacion
 import com.example.data.model.RegistroConducta
 
 @Database(
@@ -24,9 +28,12 @@ import com.example.data.model.RegistroConducta
         Alumno::class,
         RegistroConducta::class,
         CompaneroCen::class,
-        ConfiguracionApp::class
+        ConfiguracionApp::class,
+        CriterioEvaluacion::class,
+        ActividadEvaluacion::class,
+        NotaEvaluacion::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun conductaDao(): ConductaDao
     abstract fun companeroDao(): CompaneroDao
     abstract fun configuracionDao(): ConfiguracionDao
+    abstract fun evaluacionDao(): EvaluacionDao
 
     companion object {
         @Volatile

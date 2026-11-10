@@ -452,4 +452,76 @@ object CsvParser {
             nombreCompleto.trim()
         }
     }
+
+    /**
+     * Parsea el catálogo oficial de criterios de evaluación de Primaria (CE-Primaria.csv).
+     */
+    fun parseCriteriosEvaluacion(inputStream: InputStream): List<com.example.data.model.CriterioEvaluacion> {
+        val reader = crearReader(inputStream)
+        val lista = mutableListOf<com.example.data.model.CriterioEvaluacion>()
+        var cabeceraProcesada = false
+
+        reader.useLines { lines ->
+            lines.forEach { line ->
+                if (line.isBlank()) return@forEach
+                val tokens = parseCsvLine(line)
+                if (!cabeceraProcesada) {
+                    cabeceraProcesada = true
+                } else if (tokens.size >= 5) {
+                    val area = tokens[0].trim()
+                    val ciclo = tokens.getOrNull(1)?.trim() ?: ""
+                    val curso = tokens.getOrNull(2)?.trim() ?: ""
+                    val ceNum = tokens.getOrNull(3)?.trim() ?: ""
+                    val codigo = tokens.getOrNull(4)?.trim() ?: ""
+                    val descripcion = tokens.getOrNull(5)?.trim() ?: codigo
+                    val saberes = tokens.getOrNull(6)?.trim() ?: ""
+
+                    if (area.isNotBlank() && curso.isNotBlank() && codigo.isNotBlank()) {
+                        val comp = codigo.substringBefore(".").trim()
+                        lista.add(
+                            com.example.data.model.CriterioEvaluacion(
+                                area = area,
+                                ciclo = ciclo,
+                                curso = curso,
+                                ceNumero = ceNum,
+                                codigo = codigo,
+                                descripcion = descripcion,
+                                saberesBasicos = saberes,
+                                competencia = comp
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return lista
+    }
+
+    /**
+     * Normaliza el nombre de un área para casarlo con el catálogo CE-Primaria:
+     * "Cono", "Ed. Artística", "Ed. Física", "Francés", "Inglés", "Lengua", "Matemáticas"
+     */
+    fun casarAreaConCatalogo(areaOriginal: String): String {
+        val a = areaOriginal.lowercase().trim()
+        return when {
+            a.contains("cono") || a.contains("medio") || a.contains("natural") || a.contains("social") || a.contains("ciencia") -> "Cono"
+            a.contains("mate") -> "Matemáticas"
+            a.contains("lengua") || a.contains("castell") || a.contains("literatura") -> "Lengua"
+            a.contains("ingl") || a.contains("english") -> "Inglés"
+            a.contains("franc") || a.contains("french") -> "Francés"
+            a.contains("físic") || a.contains("fisic") || a.contains("e.f") || a.contains("ef") || a.contains("deporte") -> "Ed. Física"
+            a.contains("artíst") || a.contains("artist") || a.contains("plást") || a.contains("plast") || a.contains("músic") || a.contains("music") -> "Ed. Artística"
+            else -> areaOriginal.trim()
+        }
+    }
+
+    /**
+     * Extrae el número de curso de una cadena como "3º A", "3A", "5º Primaria" -> "3º", "5º", etc.
+     */
+    fun extraerCursoNumero(cadena: String): String {
+        val regex = Regex("""(\d+)""")
+        val match = regex.find(cadena)
+        return if (match != null) "${match.value}º" else cadena
+    }
 }
+
