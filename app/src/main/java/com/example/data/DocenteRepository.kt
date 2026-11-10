@@ -412,5 +412,72 @@ class DocenteRepository(
             configuracionDao.setValor(ConfiguracionApp(clave = "unidades_areas_asignadas", valor = json.toString()))
         } catch (_: Exception) {}
     }
+
+    // ==========================================
+    // MÉTODOS PARA COPIA DE SEGURIDAD TOTAL
+    // ==========================================
+
+    suspend fun obtenerTodosLosAlumnosDirecto(): List<Alumno> = withContext(Dispatchers.IO) {
+        alumnoDao.getAllDirecto()
+    }
+
+    suspend fun obtenerTodosLosCompanerosDirecto(): List<CompaneroCen> = withContext(Dispatchers.IO) {
+        companeroDao.getAllDirecto()
+    }
+
+    suspend fun obtenerTodosLosSlotsDirecto(): List<HorarioSlot> = withContext(Dispatchers.IO) {
+        horarioDao.getAllDirecto()
+    }
+
+    suspend fun obtenerTodosLosDiariosDirecto(): List<DiarioClase> = withContext(Dispatchers.IO) {
+        diarioDao.getAllDirecto()
+    }
+
+    suspend fun obtenerTodasLasConductasDirecto(): List<RegistroConducta> = withContext(Dispatchers.IO) {
+        conductaDao.getAllDirecto()
+    }
+
+    suspend fun obtenerTodasLasActividadesDirecto(): List<ActividadEvaluacion> = withContext(Dispatchers.IO) {
+        evaluacionDao.getAllActividadesDirecto()
+    }
+
+    suspend fun obtenerTodasLasNotasDirecto(): List<NotaEvaluacion> = withContext(Dispatchers.IO) {
+        evaluacionDao.getAllNotasDirecto()
+    }
+
+    suspend fun obtenerTodasLasConfigsDirecto(): List<ConfiguracionApp> = withContext(Dispatchers.IO) {
+        configuracionDao.getAllConfig()
+    }
+
+    suspend fun restaurarBaseDeDatosCompleta(
+        alumnos: List<Alumno>,
+        companeros: List<CompaneroCen>,
+        slots: List<HorarioSlot>,
+        diarios: List<DiarioClase>,
+        conductas: List<RegistroConducta>,
+        actividades: List<ActividadEvaluacion>,
+        notas: List<NotaEvaluacion>,
+        configs: List<ConfiguracionApp>
+    ) = withContext(Dispatchers.IO) {
+        // Limpiar datos existentes
+        horarioDao.deleteAll()
+        diarioDao.deleteAll()
+        alumnoDao.deleteAll()
+        companeroDao.deleteAll()
+        conductaDao.deleteAll()
+        evaluacionDao.deleteAllActividades()
+        evaluacionDao.deleteAllNotas()
+        configuracionDao.deleteAll()
+
+        // Insertar datos restaurados
+        if (configs.isNotEmpty()) configuracionDao.insertAll(configs)
+        if (alumnos.isNotEmpty()) alumnoDao.insertAll(alumnos)
+        if (companeros.isNotEmpty()) companeroDao.insertAll(companeros)
+        if (slots.isNotEmpty()) horarioDao.insertAll(slots)
+        if (diarios.isNotEmpty()) diarioDao.insertAll(diarios)
+        if (conductas.isNotEmpty()) conductaDao.insertAll(conductas)
+        if (actividades.isNotEmpty()) evaluacionDao.insertActividades(actividades)
+        if (notas.isNotEmpty()) evaluacionDao.insertOrUpdateNotas(notas)
+    }
 }
 

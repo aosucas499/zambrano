@@ -44,6 +44,9 @@ interface HorarioDao {
     @Query("DELETE FROM horario_semanal WHERE id = :id")
     suspend fun deleteSlotById(id: Long)
 
+    @Query("SELECT * FROM horario_semanal")
+    suspend fun getAllDirecto(): List<HorarioSlot>
+
     @Query("DELETE FROM horario_semanal")
     suspend fun deleteAll()
 }

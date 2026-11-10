@@ -50,6 +50,9 @@ interface DiarioDao {
     @Query("SELECT COUNT(*) FROM diario_clases")
     fun getConteoTotal(): Flow<Int>
 
+    @Query("SELECT * FROM diario_clases")
+    suspend fun getAllDirecto(): List<DiarioClase>
+
     @Query("DELETE FROM diario_clases")
     suspend fun deleteAll()
 }

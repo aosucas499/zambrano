@@ -61,6 +61,21 @@ interface EvaluacionDao {
     @Query("DELETE FROM notas_evaluacion WHERE actividadId = :actividadId")
     suspend fun deleteNotasPorActividad(actividadId: Long)
 
+    @Query("SELECT * FROM actividades_evaluacion")
+    suspend fun getAllActividadesDirecto(): List<ActividadEvaluacion>
+
+    @Query("SELECT * FROM notas_evaluacion")
+    suspend fun getAllNotasDirecto(): List<NotaEvaluacion>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertActividades(actividades: List<ActividadEvaluacion>)
+
+    @Query("DELETE FROM actividades_evaluacion")
+    suspend fun deleteAllActividades()
+
+    @Query("DELETE FROM notas_evaluacion")
+    suspend fun deleteAllNotas()
+
     @Query("DELETE FROM notas_evaluacion WHERE alumnoNombre = :alumnoNombre AND actividadId = :actividadId AND criterioCodigo = :criterioCodigo")
     suspend fun deleteNota(alumnoNombre: String, actividadId: Long, criterioCodigo: String)
 }

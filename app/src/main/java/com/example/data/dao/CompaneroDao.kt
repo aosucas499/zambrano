@@ -18,6 +18,9 @@ interface CompaneroDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(companeros: List<CompaneroCen>)
 
+    @Query("SELECT * FROM companeros_cen")
+    suspend fun getAllDirecto(): List<CompaneroCen>
+
     @Query("DELETE FROM companeros_cen")
     suspend fun deleteAll()
 }

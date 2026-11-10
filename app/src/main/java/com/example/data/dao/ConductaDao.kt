@@ -46,6 +46,12 @@ interface ConductaDao {
     @Query("DELETE FROM registros_conducta WHERE id = (SELECT id FROM registros_conducta WHERE alumnoId = :alumnoId AND fecha = :fecha AND tipo = :tipo ORDER BY timestamp DESC LIMIT 1)")
     suspend fun restarUltimoRegistro(alumnoId: Long, fecha: String, tipo: String)
 
+    @Query("SELECT * FROM registros_conducta")
+    suspend fun getAllDirecto(): List<RegistroConducta>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(registros: List<RegistroConducta>)
+
     @Query("DELETE FROM registros_conducta")
     suspend fun deleteAll()
 }

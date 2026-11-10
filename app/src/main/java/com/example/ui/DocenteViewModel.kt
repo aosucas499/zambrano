@@ -15,6 +15,7 @@ import com.example.data.model.DiarioClase
 import com.example.data.model.HorarioSlot
 import com.example.data.model.NotaEvaluacion
 import com.example.data.model.RegistroConducta
+import com.example.util.BackupManager
 import com.example.util.CsvParser
 import com.example.util.DateUtils
 import com.example.util.EvaluacionPdfExporter
@@ -1011,6 +1012,49 @@ class DocenteViewModel(application: Application) : AndroidViewModel(application)
             PdfExporter.abrirOCompartirPdf(context, uri, "Informe Global de Evaluación")
         } else {
             _uiState.value = _uiState.value.copy(snackbarMensaje = "Error al generar el informe PDF global")
+        }
+    }
+
+    fun exportarCopiaSeguridad(context: Context) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(estaCargando = true)
+            val uri = BackupManager.exportarCopiaSeguridad(context, repository)
+            _uiState.value = _uiState.value.copy(estaCargando = false)
+            if (uri != null) {
+                BackupManager.compartirCopiaSeguridad(context, uri)
+                _uiState.value = _uiState.value.copy(
+                    snackbarMensaje = "Copia de seguridad generada. Elige dónde guardarla o compartirla."
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    snackbarMensaje = "Error al generar la copia de seguridad."
+                )
+            }
+        }
+    }
+
+    fun restaurarCopiaSeguridad(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(estaCargando = true)
+            try {
+                val resumen = BackupManager.restaurarCopiaSeguridad(context, uri, repository)
+                // Recargar configuraciones locales en memoria
+                val doc = repository.getDocenteActivoConfig()
+                val asignaciones = repository.getAsignacionesUnidadesAreas()
+                _docenteFlow.value = doc
+                _uiState.value = _uiState.value.copy(
+                    docenteActivo = doc,
+                    asignacionesUnidadesAreas = asignaciones,
+                    estaCargando = false,
+                    snackbarMensaje = "¡Copia restaurada con éxito! (${resumen.alumnos} alumnos, ${resumen.actividades} actividades, ${resumen.notas} notas, ${resumen.conductas} caritas, ${resumen.slotsHorario} clases de horario)."
+                )
+                repository.sincronizarDiaLectivo(_uiState.value.fechaSeleccionada, doc)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    estaCargando = false,
+                    snackbarMensaje = "Error al restaurar copia: ${e.message}"
+                )
+            }
         }
     }
 

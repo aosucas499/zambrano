@@ -27,6 +27,9 @@ interface AlumnoDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(alumnos: List<Alumno>)
 
+    @Query("SELECT * FROM alumnos")
+    suspend fun getAllDirecto(): List<Alumno>
+
     @Query("DELETE FROM alumnos")
     suspend fun deleteAll()
 }

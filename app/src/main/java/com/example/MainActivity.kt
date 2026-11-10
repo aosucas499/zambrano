@@ -282,6 +282,8 @@ class MainActivity : ComponentActivity() {
                                 onCancelarSeleccionUnidades = { viewModel.cancelarSeleccionUnidades() },
                                 onConfirmarDocenteFet = { bytes, doc -> viewModel.confirmarImportacionFet(bytes, doc) },
                                 onCancelarSeleccionFet = { viewModel.cancelarSeleccionDocenteFet() },
+                                onExportarCopiaSeguridad = { viewModel.exportarCopiaSeguridad(context) },
+                                onRestaurarCopiaSeguridad = { uri -> viewModel.restaurarCopiaSeguridad(context, uri) },
                                 onVaciarBaseDeDatos = { viewModel.vaciarBaseDeDatos() }
                             )
                         }

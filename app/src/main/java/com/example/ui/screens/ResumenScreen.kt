@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -120,6 +121,8 @@ fun ResumenScreen(
     onCancelarSeleccionUnidades: () -> Unit,
     onConfirmarDocenteFet: (ByteArray, String) -> Unit,
     onCancelarSeleccionFet: () -> Unit,
+    onExportarCopiaSeguridad: () -> Unit,
+    onRestaurarCopiaSeguridad: (Uri) -> Unit,
     onVaciarBaseDeDatos: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -142,6 +145,12 @@ fun ResumenScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { onImportarCsv(it, TipoImportacion.CLAUSTRO) }
+    }
+
+    val restaurarCopiaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { onRestaurarCopiaSeguridad(it) }
     }
 
     Column(
@@ -223,6 +232,8 @@ fun ResumenScreen(
                     onImportarSeneca = { importSenecaLauncher.launch(arrayOf("text/*", "application/*")) },
                     onImportarFet = { importFetLauncher.launch(arrayOf("text/*", "application/*")) },
                     onImportarClaustro = { importClaustroLauncher.launch(arrayOf("text/*", "application/*")) },
+                    onExportarCopiaSeguridad = onExportarCopiaSeguridad,
+                    onRestaurarCopiaSeguridad = { restaurarCopiaLauncher.launch(arrayOf("*/*", "application/json")) },
                     onVaciarDatos = onVaciarBaseDeDatos
                 )
             }
@@ -612,6 +623,8 @@ private fun SeccionImportacionArchivos(
     onImportarSeneca: () -> Unit,
     onImportarFet: () -> Unit,
     onImportarClaustro: () -> Unit,
+    onExportarCopiaSeguridad: () -> Unit,
+    onRestaurarCopiaSeguridad: () -> Unit,
     onVaciarDatos: () -> Unit
 ) {
     LazyColumn(
@@ -621,6 +634,79 @@ private fun SeccionImportacionArchivos(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(bottom = 30.dp)
     ) {
+        // Tarjeta Destacada: Copia de Seguridad Completa (Backup Total)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Copia de Seguridad Completa (.json)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "Guarda o restaura en un solo archivo todos los datos de la app.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Incluye: Alumnado, claustro, horario, diario de clases, caritas y observaciones de conducta, situaciones de aprendizaje (SdAs), actividades y todas las calificaciones de evaluación.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f)
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = onExportarCopiaSeguridad,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Crear Copia")
+                        }
+
+                        OutlinedButton(
+                            onClick = onRestaurarCopiaSeguridad,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Restaurar")
+                        }
+                    }
+                }
+            }
+        }
+
         // Tarjeta Informativa: Guía de obtención de archivos (Profesorado, Alumnado y Horarios)
         item {
             Card(

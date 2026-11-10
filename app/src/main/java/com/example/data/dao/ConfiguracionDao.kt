@@ -13,4 +13,13 @@ interface ConfiguracionDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun setValor(config: ConfiguracionApp)
+
+    @Query("SELECT * FROM configuracion_app")
+    suspend fun getAllConfig(): List<ConfiguracionApp>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(configs: List<ConfiguracionApp>)
+
+    @Query("DELETE FROM configuracion_app")
+    suspend fun deleteAll()
 }
